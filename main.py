@@ -17,6 +17,12 @@ main_menu_bg = pygame.image.load('Assets/mainmenu.png').convert_alpha()
 
 population_manager = population.Population(100)
 game_state = {'pipes_spawn_time': 10}
+ui_state = {
+    'simulation_speed': 5.0,
+    'slider_dragging': False,
+    'pending_planes': 100,
+    'is_paused': False,
+}
 
 MENU_MAIN = 'main'
 MENU_INSTRUCTIONS = 'instructions'
@@ -51,6 +57,20 @@ def draw_background():
 
     config.window.blit(top_scaled, (0, 0))
     config.window.blit(bottom_scaled, (0, bottom_y))
+
+
+def restart_simulation():
+    global population_manager
+    population_manager = population.Population(ui_state['pending_planes'])
+    population_manager.generation = 0
+    config.pipes.clear()
+    game_state['pipes_spawn_time'] = 10
+    ui_state['is_paused'] = False
+
+
+def update_slider_from_mouse(x_pos, track_rect):
+    ratio = max(0.0, min(1.0, (x_pos - track_rect.left) / track_rect.width))
+    ui_state['simulation_speed'] = round(ratio * 10.0, 2)
 
 
 def handle_common_events(event):
@@ -157,22 +177,33 @@ def run_game_step():
 
     config.ground.draw(config.window)
 
-    if game_state['pipes_spawn_time'] <= 0:
-        generate_pipes()
-        game_state['pipes_spawn_time'] = 200
-    game_state['pipes_spawn_time'] -= 1
+    def simulation_tick():
+        if game_state['pipes_spawn_time'] <= 0:
+            generate_pipes()
+            game_state['pipes_spawn_time'] = 200
+        game_state['pipes_spawn_time'] -= 1
+
+        for p in list(config.pipes):
+            p.update()
+            if p.off_screen:
+                config.pipes.remove(p)
+
+        if not population_manager.extinct():
+            population_manager.update_live_players()
+        else:
+            config.pipes.clear()
+            population_manager.natural_selection()
+
+    if not ui_state['is_paused']:
+        ticks = max(1, int(round(ui_state['simulation_speed'])))
+        for _ in range(ticks):
+            simulation_tick()
 
     for p in list(config.pipes):
         p.draw(config.window)
-        p.update()
-        if p.off_screen:
-            config.pipes.remove(p)
-
-    if not population_manager.extinct():
-        population_manager.update_live_players()
-    else:
-        config.pipes.clear()
-        population_manager.natural_selection()
+    for pl in population_manager.players:
+        if pl.alive:
+            pl.draw(config.window)
 
 
 def render_game_placeholder(title_font):
@@ -228,6 +259,95 @@ def render_instructions(menu_font):
     config.window.blit(back_surf, back_rect)
 
 
+def draw_control_panel(menu_font):
+    ground_y = components.Ground.ground_level
+    ground_h = getattr(config.ground, 'rect', pygame.Rect(0, 0, 0, 8)).height if config.ground else 8
+    panel_y = ground_y + ground_h
+    panel_rect = pygame.Rect(0, panel_y, config.win_width, max(60, config.win_height - panel_y))
+    pygame.draw.rect(config.window, (0, 0, 0), panel_rect)
+
+    padding = max(12, int(config.win_width * 0.01))
+    white = (255, 255, 255)
+    dark = (20, 20, 20)
+    grey = (180, 180, 180)
+
+    # Iteration counter top-right
+    iter_font = pygame.font.Font('font/Pixeltype.ttf', max(18, int(menu_font.get_height() * 0.75)))
+    iter_text = iter_font.render(f'Number of Iterations: {population_manager.generation}', True, white)
+    iter_rect = iter_text.get_rect(topright=(panel_rect.right - padding, panel_rect.top + padding))
+    config.window.blit(iter_text, iter_rect)
+
+    # Simulation speed slider top-left
+    slider_width = max(180, int(config.win_width * 0.22))
+    slider_track = pygame.Rect(panel_rect.left + padding, panel_rect.top + padding, slider_width, 12)
+    pygame.draw.rect(config.window, grey, slider_track, border_radius=6)
+    knob_x = slider_track.left + (ui_state['simulation_speed'] / 10.0) * slider_track.width
+    knob_rect = pygame.Rect(0, 0, 18, 24)
+    knob_rect.center = (knob_x, slider_track.centery)
+    pygame.draw.rect(config.window, white, knob_rect, border_radius=6)
+    speed_label = menu_font.render(f'Speed: {ui_state["simulation_speed"]:.1f}', True, white)
+    speed_rect = speed_label.get_rect(left=slider_track.left, top=slider_track.bottom + 6)
+    config.window.blit(speed_label, speed_rect)
+
+    # Plane count controls
+    plane_y = speed_rect.bottom + max(6, int(menu_font.get_height() * 0.3))
+    label_surf = menu_font.render('Planes:', True, white)
+    label_rect = label_surf.get_rect(left=slider_track.left, centery=plane_y + menu_font.get_height() // 2)
+
+    minus_size = max(28, int(menu_font.get_height() * 1.1))
+    btn_gap = max(16, int(config.win_width * 0.01))
+    count_surf = menu_font.render(str(ui_state['pending_planes']), True, white)
+
+    # Horizontal layout computed from left to right
+    x_cursor = label_rect.right + btn_gap
+    minus_rect = pygame.Rect(x_cursor, plane_y, minus_size, minus_size)
+    x_cursor = minus_rect.right + btn_gap
+    count_rect = count_surf.get_rect(topleft=(x_cursor, plane_y + (minus_size - count_surf.get_height()) // 2))
+    x_cursor = count_rect.right + btn_gap
+    plus_rect = pygame.Rect(x_cursor, plane_y, minus_size, minus_size)
+
+    pygame.draw.rect(config.window, white, minus_rect, border_radius=4)
+    pygame.draw.rect(config.window, white, plus_rect, border_radius=4)
+    minus_label = menu_font.render('-', True, dark)
+    plus_label = menu_font.render('+', True, dark)
+    config.window.blit(label_surf, label_rect)
+    config.window.blit(minus_label, minus_label.get_rect(center=minus_rect.center))
+    config.window.blit(plus_label, plus_label.get_rect(center=plus_rect.center))
+    config.window.blit(count_surf, count_rect)
+
+    # Pause / Restart center
+    center_x = panel_rect.centerx
+    btn_w = max(160, int(config.win_width * 0.18))
+    btn_h = max(44, int(menu_font.get_height() * 1.6))
+    pause_rect = pygame.Rect(0, 0, btn_w, btn_h)
+    pause_rect.center = (center_x, panel_rect.top + panel_rect.height * 0.4)
+    restart_rect = pygame.Rect(0, 0, btn_w, btn_h)
+    restart_rect.center = (center_x, pause_rect.bottom + 14 + restart_rect.height // 2)
+    pygame.draw.rect(config.window, white, pause_rect, border_radius=6)
+    pygame.draw.rect(config.window, white, restart_rect, border_radius=6)
+    pause_label = menu_font.render('Pause' if not ui_state['is_paused'] else 'Resume', True, dark)
+    restart_label = menu_font.render('Restart', True, dark)
+    config.window.blit(pause_label, pause_label.get_rect(center=pause_rect.center))
+    config.window.blit(restart_label, restart_label.get_rect(center=restart_rect.center))
+
+    # Back to menu bottom-right
+    back_rect = pygame.Rect(0, 0, max(260, int(config.win_width * 0.24)), max(48, int(menu_font.get_height() * 1.6)))
+    back_rect.bottomright = (panel_rect.right - padding, panel_rect.bottom - padding)
+    pygame.draw.rect(config.window, white, back_rect, border_radius=6)
+    back_label = menu_font.render('Back to Menu', True, dark)
+    config.window.blit(back_label, back_label.get_rect(center=back_rect.center))
+
+    return {
+        'slider_track': slider_track,
+        'slider_knob': knob_rect,
+        'minus': minus_rect,
+        'plus': plus_rect,
+        'pause': pause_rect,
+        'restart': restart_rect,
+        'back': back_rect,
+    }
+
+
 def main():
     state = MENU_MAIN
     while True:
@@ -243,6 +363,7 @@ def main():
         elif state == MENU_GAME:
             buttons = []
             run_game_step()
+            control_rects = draw_control_panel(menu_font)
 
         for event in events:
             handle_common_events(event)
@@ -271,6 +392,24 @@ def main():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = MENU_MAIN
             elif state == MENU_GAME:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if control_rects['slider_track'].collidepoint(event.pos) or control_rects['slider_knob'].collidepoint(event.pos):
+                        ui_state['slider_dragging'] = True
+                        update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
+                    elif control_rects['minus'].collidepoint(event.pos):
+                        ui_state['pending_planes'] = max(1, ui_state['pending_planes'] - 1)
+                    elif control_rects['plus'].collidepoint(event.pos):
+                        ui_state['pending_planes'] = min(1000, ui_state['pending_planes'] + 1)
+                    elif control_rects['pause'].collidepoint(event.pos):
+                        ui_state['is_paused'] = not ui_state['is_paused']
+                    elif control_rects['restart'].collidepoint(event.pos):
+                        restart_simulation()
+                    elif control_rects['back'].collidepoint(event.pos):
+                        state = MENU_MAIN
+                if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                    ui_state['slider_dragging'] = False
+                if event.type == pygame.MOUSEMOTION and ui_state['slider_dragging']:
+                    update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = MENU_MAIN
 
