@@ -1,5 +1,4 @@
 import brain
-import random
 import pygame
 import config
 
@@ -8,12 +7,16 @@ class Player:
     def __init__(self):
         # Bird
         self.x, self.y = 50, 200
-        self.rect = pygame.Rect(self.x, self.y, 20, 20)
-        self.color = random.randint(100, 255), random.randint(100, 255), random.randint(100, 255)
+        self.hk_run = pygame.transform.smoothscale(
+            pygame.image.load('Assets/hk_1.png').convert_alpha(), (40, 40))
+        self.hk_air = pygame.transform.smoothscale(
+            pygame.image.load('Assets/hk_2.png').convert_alpha(), (40, 40))
+        self.rect = self.hk_run.get_rect(topleft=(self.x, self.y))
         self.vel = 0
         self.flap = False
         self.alive = True
         self.lifespan = 0
+        self.on_ground = False
 
         # AI
         self.decision = None
@@ -25,7 +28,8 @@ class Player:
 
     # Game related functions
     def draw(self, window):
-        pygame.draw.rect(window, self.color, self.rect)
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        window.blit(sprite, self.rect)
 
     def ground_collision(self, ground):
         return pygame.Rect.colliderect(self.rect, ground)
@@ -35,8 +39,9 @@ class Player:
 
     def pipe_collision(self):
         for p in config.pipes:
-            return pygame.Rect.colliderect(self.rect, p.top_rect) or \
-                   pygame.Rect.colliderect(self.rect, p.bottom_rect)
+            if pygame.Rect.colliderect(self.rect, p.top_rect) or pygame.Rect.colliderect(self.rect, p.bottom_rect):
+                return True
+        return False
 
     def update(self, ground):
         if not (self.ground_collision(ground) or self.pipe_collision()):
@@ -45,9 +50,11 @@ class Player:
             self.rect.y += self.vel
             if self.vel > 5:
                 self.vel = 5
+            self.on_ground = False
             # Increment lifespan
             self.lifespan += 1
         else:
+            self.on_ground = True
             self.alive = False
             self.flap = False
             self.vel = 0
@@ -64,25 +71,28 @@ class Player:
         for p in config.pipes:
             if not p.passed:
                 return p
+        if config.pipes:
+            return config.pipes[0]
 
     # AI related functions
     def look(self):
         if config.pipes:
+            closest = self.closest_pipe()
 
             # Line to top pipe
-            self.vision[0] = max(0, self.rect.center[1] - self.closest_pipe().top_rect.bottom) / 500
-            pygame.draw.line(config.window, self.color, self.rect.center,
-                             (self.rect.center[0], config.pipes[0].top_rect.bottom))
+            self.vision[0] = max(0, self.rect.center[1] - closest.top_rect.bottom) / 500
+            pygame.draw.line(config.window, (255, 255, 255), self.rect.center,
+                             (self.rect.center[0], closest.top_rect.bottom))
 
             # Line to mid pipe
-            self.vision[1] = max(0, self.closest_pipe().x - self.rect.center[0]) / 500
-            pygame.draw.line(config.window, self.color, self.rect.center,
-                             (config.pipes[0].x, self.rect.center[1]))
+            self.vision[1] = max(0, closest.x - self.rect.center[0]) / 500
+            pygame.draw.line(config.window, (255, 255, 255), self.rect.center,
+                             (closest.x, self.rect.center[1]))
 
             # Line to bottom pipe
-            self.vision[2] = max(0, self.closest_pipe().bottom_rect.top - self.rect.center[1]) / 500
-            pygame.draw.line(config.window, self.color, self.rect.center,
-                             (self.rect.center[0], config.pipes[0].bottom_rect.top))
+            self.vision[2] = max(0, closest.bottom_rect.top - self.rect.center[1]) / 500
+            pygame.draw.line(config.window, (255, 255, 255), self.rect.center,
+                             (self.rect.center[0], closest.bottom_rect.top))
 
     def think(self):
         self.decision = self.brain.feed_forward(self.vision)
