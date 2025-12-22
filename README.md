@@ -242,14 +242,6 @@ Using a `config.py` for global settings and shared objects offers many advantage
 | **Shared Resources**         | Important game objects (like the `window` or `ground`) are readily available to all parts of the game that need them. |
 | **Modularity & Organization**| Keeps global variables separate from game logic, making the code cleaner. |
 
-## Conclusion
-
-The `config.py` module is our project's command center for global settings and shared resources. By understanding how to access and modify these settings, and how functions like `create_window()` and `toggle_fullscreen()` work, you've taken a crucial first step in understanding the FlightX project. This central hub makes our game much easier to manage and modify.
-
-Now that we know how to set up the basic game parameters, let's dive into creating the actual game world our AI aircraft will interact with.
-
-[Next Chapter: Game Environment & Obstacles](02_game_environment___obstacles_.md)
-
 ---
 
 # Chapter 2: Game Environment & Obstacles
@@ -361,24 +353,20 @@ Let's peek into the `components.py` file, where the blueprints for our `Ground` 
 
 When a new pipe is added to the game, and then continuously updated and drawn, here's the basic flow:
 
-```mermaid
 sequenceDiagram
     participant MainGame as main.py
     participant Configuration as config.py
     participant GameComponents as components.py
 
-    MainGame->>MainGame: Checks if it's time to spawn a new pipe
-    MainGame->>GameComponents: Requests a new 'Pipes' object (components.Pipes(config.win_width))
-    GameComponents-->>MainGame: Returns a brand new Pipes object (random height, off-screen right)
-    MainGame->>Configuration: Adds the new Pipes object to the global 'pipes' list (config.pipes.append)
+    MainGame->>MainGame: Check if it's time to spawn a new pipe
+    MainGame->>GameComponents: Create Pipes object (Pipes(config.win_width))
+    GameComponents-->>MainGame: Return new Pipes (random height, off-screen right)
+    MainGame->>Configuration: Append pipe to config.pipes
 
-    Note over MainGame: --- In every game frame ---
-    MainGame->>Configuration: Retrieves all active pipes from 'config.pipes'
-    MainGame->>GameComponents: For each pipe: Calls pipe.update()
-    Note over GameComponents: Pipe moves left; checks if passed/off-screen
-    MainGame->>GameComponents: For each pipe: Calls pipe.draw(config.window)
-    Note over GameComponents: Pipe draws itself on the screen
-```
+    Note over MainGame: Executed every game frame
+
+    MainGame->>Configuration: Retrieve all active pipes
+
 This diagram shows how `main.py` orchestrates the creation of a `Pipes` object using `components.py`, stores it in `config.py`, and then in every game frame, tells each pipe to update its state and draw itself.
 
 ### The `Ground` Class
@@ -466,14 +454,6 @@ Structuring our game environment as classes offers several advantages:
 | **Dynamic Behavior**        | Objects like `Pipes` can be created, updated, and removed dynamically during gameplay, making the game interactive. |
 | **Clear Interaction**       | `main.py` clearly tells objects to `update()` and `draw()`, rather than managing all their internal details itself. |
 
-## Conclusion
-
-By understanding the `Ground` and `Pipes` classes, you now know how FlightX builds its interactive game world. These components define the "field" and "obstacles" for our AI. We've seen how `config.py` helps store these objects globally and how `main.py` uses `components.py` to create, update, and draw them.
-
-Next, we'll introduce our main character: the AI Player, which is the aircraft agent that will attempt to fly through this challenging environment!
-
-[Next Chapter: AI Player (Aircraft Agent)](03_ai_player__aircraft_agent__.md)
-
 ---
 
 # Chapter 3: AI Player (Aircraft Agent)
@@ -523,43 +503,6 @@ print(f"Player alive status: {player_instance.alive}")
 # Then later, if it crashes: Player alive status: False
 ```
 This simplified sequence shows the core loop: "look" (sense), "think" (decide), "update" (act), and "draw" (visualize).
-
-## Under the Hood: Inside `player.py`
-
-Let's dive into the `player.py` file to understand how an `AI Player` is built and how it functions.
-
-### High-Level Walkthrough: A Player's Frame-by-Frame Life
-
-In every tiny slice of time (each game frame), a living `Player` goes through a cycle of sensing, deciding, and acting:
-
-```mermaid
-sequenceDiagram
-    participant MainGame as main.py / population.py
-    participant PlayerAgent as player.py
-    participant Configuration as config.py
-    participant PlayerBrain as brain.py
-
-    MainGame->>PlayerAgent: Calls player.look()
-    Note over PlayerAgent: Gathers vision data from environment
-    PlayerAgent->>Configuration: Requests 'closest_pipe' and 'config.window'
-    PlayerAgent-->>MainGame: (vision data updated internally)
-
-    MainGame->>PlayerAgent: Calls player.think()
-    Note over PlayerAgent: Uses its brain to make a decision
-    PlayerAgent->>PlayerBrain: Calls brain.feed_forward(vision_data)
-    PlayerBrain-->>PlayerAgent: Returns decision (e.g., "flap" or "drop")
-    Note over PlayerAgent: Player takes action (e.g., changes velocity)
-
-    MainGame->>PlayerAgent: Calls player.update(config.ground)
-    Note over PlayerAgent: Moves player; checks for collisions
-    PlayerAgent->>Configuration: Requests 'config.ground'
-    PlayerAgent->>PlayerAgent: Checks pipe_collision() / ground_collision()
-    Note over PlayerAgent: If collision, player.alive = False
-
-    MainGame->>PlayerAgent: Calls player.draw(config.window)
-    Note over PlayerAgent: Draws itself on the screen
-    PlayerAgent->>Configuration: Draws on 'config.window'
-```
 
 ### The `Player` Class: Blueprint of an Aircraft
 
@@ -769,14 +712,6 @@ Having a dedicated `Player` class brings many advantages:
 | **Clear Responsibilities**  | `player.py` clearly defines what an individual aircraft *is* and *does*, separating it from other game logic. |
 | **Modularity**              | Makes the code easier to understand, test, and maintain because different parts of the game are organized into logical units. |
 | **Reusable AI Structure**   | The `Player` provides a template for any agent that needs to sense, think, and act in a game environment. |
-
-## Conclusion
-
-The `AI Player` (Aircraft Agent) is the central character in our FlightX simulation. You've learned how each `Player` acts as an independent entity with its own physical properties, game logic, and, most importantly, its own AI "brain." We've seen how it senses the world with `look()`, makes decisions with `think()`, and interacts with the environment through `update()` and its collision checks.
-
-Now that we understand what an `AI Player` is, the natural next step is to explore the mysterious "brain" itself – the [Neural Network](04_neural_network__ai_brain__.md) that allows these players to learn and make decisions.
-
-[Next Chapter: Neural Network (AI Brain)](04_neural_network__ai_brain__.md)
 
 ---
 
