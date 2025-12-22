@@ -12,7 +12,7 @@ pygame.display.set_icon(pygame.image.load('Assets/aeroplane.jpg'))
 config.reset_ground()
 
 background_top = pygame.image.load('Assets/sky2.jpg').convert()
-background_bottom = pygame.image.load('Assets/soil.jpg').convert()
+background_bottom = pygame.image.load('Assets/dark1.jpg').convert()
 main_menu_bg = pygame.image.load('Assets/mainmenu.png').convert_alpha()
 
 population_manager = population.Population(100)
@@ -25,7 +25,7 @@ MENU_GAME = 'game'
 
 def get_fonts():
     base = min(config.win_width, config.win_height)
-    title_size = max(64, int(base * 0.2))
+    title_size = max(64, int(base * 0.3))
     menu_size = max(28, int(base * 0.08))
     author_size = max(32, int(base * 0.1))
     return (
