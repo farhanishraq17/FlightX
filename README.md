@@ -90,6 +90,44 @@ flowchart TD
     A5 -- "Provides central settings" --> A0
 ```
 ---
+## 🖥️ Main Menu Screenshots
+
+<table align="center">
+  <tr>
+    <td align="center" valign="top">
+      <img src="Demonstration/main_menu_1.png" alt="Ship Placement Screen" width="300"><br>
+      <em>Main-Menu</em>
+    </td>
+    <td align="center" valign="top">
+      <img src="Demonstration/mani_menu_2.png" alt="Gameplay Screen" width="300"><br>
+      <em>Instruction Panel</em>
+    </td>
+  </tr>
+</table>
+
+
+---
+
+## 🖥️ Simulation Screenshots
+
+<table align="center">
+  <tr>
+    <td align="center" valign="top">
+      <img src="Demonstration/game1.png" alt="Ship Placement Screen" width="300"><br>
+      <em>Snap - 01</em>
+    </td>
+    <td align="center" valign="top">
+      <img src="Demonstration/game2.png" alt="Ship Placement Screen" width="300"><br>
+      <em>Snap - 02</em>
+    </td>
+    <td align="center" valign="top">
+      <img src="Demonstration/game3.png" alt="Gameplay Screen" width="300"><br>
+      <em>Snap - 03</em>
+    </td>
+  </tr>
+</table>
+
+--- 
 
 ## 🌍 Simulation Environment
 
