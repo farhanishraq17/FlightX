@@ -1,8 +1,18 @@
+import os
 import pygame
 from sys import exit
 import config
 import components
 import population
+import matplotlib
+
+try:
+    matplotlib.use('TkAgg')
+except Exception:
+    matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+INTERACTIVE_BACKEND = matplotlib.get_backend().lower() != 'agg'
 
 pygame.init()
 clock = pygame.time.Clock()
@@ -17,6 +27,7 @@ main_menu_bg = pygame.image.load('Assets/mainmenu.png').convert_alpha()
 
 population_manager = population.Population(100)
 game_state = {'pipes_spawn_time': 10, 'score': 0, 'high_score': 0}
+graph_state = {'data': [], 'last_logged_gen': None, 'dirty': False}
 ui_state = {
     'simulation_speed': 0.0,
     'slider_dragging': False,
@@ -68,6 +79,9 @@ def restart_simulation():
     game_state['score'] = 0
     game_state['high_score'] = 0
     ui_state['is_paused'] = False
+    graph_state['data'].clear()
+    graph_state['last_logged_gen'] = None
+    graph_state['dirty'] = False
 
 
 def update_slider_from_mouse(x_pos, track_rect):
@@ -178,6 +192,73 @@ def draw_main_menu(layout):
     author_surf, author_rect = layout['author']
     config.window.blit(author_surf, author_rect)
     return buttons
+
+
+def update_graph_data():
+    # Capture score every 3 iterations (generations)
+    current_gen = population_manager.generation
+    if current_gen == graph_state['last_logged_gen']:
+        return
+    graph_state['last_logged_gen'] = current_gen
+    if current_gen % 3 != 0:
+        return
+    graph_state['data'].append((current_gen, game_state['high_score']))
+    graph_state['dirty'] = True
+
+
+def render_graph(save_path=None, show_window=False, force=False):
+    if force and not graph_state['data']:
+        graph_state['data'].append((population_manager.generation, game_state['high_score']))
+    if not graph_state['data']:
+        return
+
+    xs, ys = zip(*graph_state['data'])
+    fig, ax = plt.subplots(figsize=(5, 3))
+    ax.plot(xs, ys, marker='o', linestyle='-', color='skyblue', label='Total Score')
+
+    max_idx = max(range(len(ys)), key=lambda i: ys[i]) if ys else 0
+    ax.scatter([xs[max_idx]], [ys[max_idx]], color='crimson', marker='*', s=140, label='Interval High')
+
+    ax.set_xlabel('Iteration (every 3)')
+    ax.set_ylabel('Total Score')
+    if xs:
+        ax.set_xticks(xs)
+    y_max = max(ys) if ys else 10
+    y_limit = max(10, (int(y_max / 10) + 1) * 10)
+    ax.set_yticks(list(range(0, y_limit + 1, 10)))
+    ax.grid(True, linestyle='--', alpha=0.5)
+    ax.legend()
+    fig.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path)
+
+    if show_window:
+        if INTERACTIVE_BACKEND:
+            fig.canvas.manager.set_window_title('Score Graph')
+            fig.canvas.draw_idle()
+            plt.show(block=True)
+            plt.close(fig)
+        else:
+            target = save_path or 'score_graph.png'
+            fig.savefig(target)
+            try:
+                os.startfile(target)
+            except Exception:
+                pass
+            plt.close(fig)
+    else:
+        plt.close(fig)
+
+    graph_state['dirty'] = False
+
+
+def generate_graph_image(force=False):
+    render_graph(save_path='score_graph.png', show_window=False, force=force)
+
+
+def show_graph_window():
+    render_graph(save_path='score_graph.png', show_window=True, force=True)
 
 
 def run_game_step():
@@ -300,6 +381,10 @@ def draw_control_panel(menu_font):
     config.window.blit(high_text, high_rect)
     config.window.blit(score_text, score_rect)
 
+    update_graph_data()
+    if graph_state['dirty']:
+        generate_graph_image()
+
     # Simulation speed slider top-left
     slider_width = max(180, int(config.win_width * 0.22))
     slider_track = pygame.Rect(panel_rect.left + padding, panel_rect.top + padding, slider_width, 12)
@@ -403,6 +488,22 @@ def draw_control_panel(menu_font):
         config.window.blit(surf, rect)
         cursor_y += surf.get_height() + 3
 
+    # Graph box to the right of info box
+    box_gap = max(10, int(config.win_width * 0.01))
+    graph_x = min(pause_rect.left - padding - box_width, info_box.right + box_gap)
+    graph_x = max(panel_rect.left + padding, min(graph_x, panel_rect.right - padding - box_width))
+    graph_y = box_y
+    graph_box = pygame.Rect(graph_x, graph_y, box_width, box_height)
+    pygame.draw.rect(config.window, (30, 30, 30), graph_box, border_radius=6)
+    pygame.draw.rect(config.window, white, graph_box, width=1, border_radius=6)
+    graph_font = pygame.font.Font('font/Pixeltype.ttf', max(16, int(menu_font.get_height() * 0.8)))
+    graph_line1 = graph_font.render('Generate', True, white)
+    graph_line2 = graph_font.render('Graph', True, white)
+    total_h = graph_line1.get_height() + graph_line2.get_height() + 2
+    start_y = graph_box.centery - total_h // 2
+    config.window.blit(graph_line1, graph_line1.get_rect(center=(graph_box.centerx, start_y + graph_line1.get_height() // 2)))
+    config.window.blit(graph_line2, graph_line2.get_rect(center=(graph_box.centerx, start_y + graph_line1.get_height() + 2 + graph_line2.get_height() // 2)))
+
     # Back to menu bottom-right
     back_rect = pygame.Rect(0, 0, max(260, int(config.win_width * 0.24)), max(48, int(menu_font.get_height() * 1.6)))
     back_rect.bottomright = (panel_rect.right - padding, panel_rect.bottom - padding)
@@ -418,6 +519,7 @@ def draw_control_panel(menu_font):
         'lines_toggle': toggle_rect,
         'pause': pause_rect,
         'restart': restart_rect,
+        'graph': graph_box,
         'back': back_rect,
     }
 
@@ -477,6 +579,9 @@ def main():
                         update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
                     elif control_rects['lines_toggle'].collidepoint(event.pos):
                         config.show_lines = not config.show_lines
+                    elif control_rects['graph'].collidepoint(event.pos):
+                        graph_state['dirty'] = True
+                        show_graph_window()
                     elif control_rects['pause'].collidepoint(event.pos):
                         ui_state['is_paused'] = not ui_state['is_paused']
                     elif control_rects['restart'].collidepoint(event.pos):
