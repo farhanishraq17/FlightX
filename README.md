@@ -1,4 +1,8 @@
 ## FlightX
+![Python](https://img.shields.io/badge/-Python-000?style=flat&logo=python)
+![Pygame](https://img.shields.io/badge/-Pygame-000?style=flat)
+![NumPy](https://img.shields.io/badge/-NumPy-000?style=flat&logo=numpy)
+![Matplotlib](https://img.shields.io/badge/-Matplotlib-000?style=flat)
 
 FlightX is an **AI simulation** where *virtual aircraft* learn to fly through a challenging environment filled with obstacles. Each aircraft is controlled by a **neural network** that acts as its "brain," making decisions based on its perception. The project uses a **NEAT evolutionary algorithm** to allow these AI players to *learn and improve* their flying skills over many generations, progressively getting smarter at navigating the game world.
 
