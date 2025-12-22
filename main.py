@@ -317,40 +317,68 @@ def render_instructions(menu_font):
     bg_scaled.set_alpha(153)
     config.window.blit(bg_scaled, (0, 0))
 
+    instr_font = pygame.font.Font('font/Pixeltype.ttf', max(32, int(menu_font.get_height() * 1.05)))
+
     lorem = (
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. '
-        'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in '
-        'voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.'
+        'FlightX Control Panel Guide\n\n'
+        'Speed Bar: Drag to adjust simulation speed (0-10).\n\n'
+        'Plane Count: Set number of agents (applies after Restart).\n\n'
+        'Lines Off: Toggle AI vision lines on/off.\n\n'
+        'Stats: View active Jumps, Alive Agents, and Reward.\n\n'
+        'Pause: Freeze the simulation.\n\n'
+        'Restart: Reset the simulation and apply new settings.\n\n'
+        'Back: Return to the Main Menu.\n\n'
+        'Generate Graph: Create and view the score graph image.'
     )
-    margin = 40
-    max_width = config.win_width - margin * 2
-    color = (255, 255, 255)
+    outer_pad = max(32, int(min(config.win_width, config.win_height) * 0.03))
+    box_w = min(config.win_width - outer_pad * 2, int(config.win_width * 0.82))
+    box_h = min(config.win_height - outer_pad * 2, int(config.win_height * 0.78))
+    box_rect = pygame.Rect(0, 0, box_w, box_h)
+    box_rect.center = (config.win_width // 2, config.win_height // 2)
+    panel = pygame.Surface(box_rect.size, pygame.SRCALPHA)
+    panel.fill((50, 50, 50, 210))
+    pygame.draw.rect(panel, (220, 220, 220, 230), panel.get_rect(), width=2, border_radius=12)
+    config.window.blit(panel, box_rect.topleft)
+
+    inner_pad = max(18, int(instr_font.get_height() * 0.6))
+    max_width = box_rect.width - inner_pad * 2
+    color = (240, 240, 240)
 
     def wrap_text(text, font, max_w):
-        words = text.split(' ')
         lines = []
-        current = ''
-        for word in words:
-            test = (current + ' ' + word).strip()
-            if font.size(test)[0] <= max_w:
-                current = test
-            else:
+        for block in text.split('\n'):
+            if not block:
+                lines.append('')
+                continue
+            words = block.split(' ')
+            current = ''
+            for word in words:
+                test = (current + ' ' + word).strip()
+                if font.size(test)[0] <= max_w:
+                    current = test
+                else:
+                    lines.append(current)
+                    current = word
+            if current:
                 lines.append(current)
-                current = word
-        if current:
-            lines.append(current)
         return lines
 
-    lines = wrap_text(lorem, menu_font, max_width)
-    y = margin
+    lines = wrap_text(lorem, instr_font, max_width)
+    y = box_rect.top + inner_pad
+    first_line = True
     for line in lines:
-        surf = menu_font.render(line, True, color)
-        rect = surf.get_rect(topleft=(margin, y))
+        surf = instr_font.render(line, True, color)
+        if first_line and line.strip().startswith('FlightX Control Panel Guide'):
+            rect = surf.get_rect(midtop=(box_rect.centerx, y))
+        else:
+            rect = surf.get_rect(topleft=(box_rect.left + inner_pad, y))
         config.window.blit(surf, rect)
-        y += surf.get_height() + 8
+        y += surf.get_height() + 10
+        first_line = False
 
-    back_surf = menu_font.render('Press ESC to return', True, (200, 200, 200))
-    back_rect = back_surf.get_rect(bottomright=(config.win_width - margin, config.win_height - margin))
+    back_font = pygame.font.Font('font/Pixeltype.ttf', max(20, int(menu_font.get_height() * 0.8)))
+    back_surf = back_font.render('Press ESC to return', True, (210, 210, 210))
+    back_rect = back_surf.get_rect(bottomright=(box_rect.right - inner_pad, box_rect.bottom - inner_pad))
     config.window.blit(back_surf, back_rect)
 
 
