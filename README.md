@@ -1,8 +1,32 @@
-## FlightX
+<h1 align="center">
+  <span style="font-family: monospace; font-weight: bold;">
+    F L I G H T - X
+  </span>
+</h1>
+
+<div align="center">
+
 ![Python](https://img.shields.io/badge/-Python-000?style=flat&logo=python)
 ![Pygame](https://img.shields.io/badge/-Pygame-000?style=flat)
 ![NumPy](https://img.shields.io/badge/-NumPy-000?style=flat&logo=numpy)
 ![Matplotlib](https://img.shields.io/badge/-Matplotlib-000?style=flat)
+  
+  <table width="80%">
+    <tr>
+      <td style="vertical-align: top; padding-right: 20px;">
+        <strong>Authors:</strong><br>
+        Md. Farhan Ishraq<br>
+      </td>
+      <td style="vertical-align: top; padding-left: 20px;">
+        <strong>Supervisor:</strong><br>
+        MD. ATIQUR RAHMAN<br>
+        Lecturer, Dept. of CSE,<br>
+        IUT
+      </td>
+    </tr>
+  </table>
+</div>
+
 
 FlightX is an **AI simulation** where *virtual aircraft* learn to fly through a challenging environment filled with obstacles. Each aircraft is controlled by a **neural network** that acts as its "brain," making decisions based on its perception. The project uses a **NEAT evolutionary algorithm** to allow these AI players to *learn and improve* their flying skills over many generations, progressively getting smarter at navigating the game world.
 
@@ -12,7 +36,17 @@ This project was built as an **academic and experimental platform** to explore:
 - Evolutionary learning
 - Real-time simulation systems
 
-No external machine learning or deep learning libraries are used.
+<div align="center">
+
+
+```
+╔════════════════════════════════════════════════════════════╗
+║  No external machine learning or deep learning libraries   ║
+║                 are used in this project.                  ║
+╚════════════════════════════════════════════════════════════╝
+```
+</div>
+
 
 ## Visual Overview
 
