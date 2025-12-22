@@ -6,6 +6,13 @@
 
 FlightX is an **AI simulation** where *virtual aircraft* learn to fly through a challenging environment filled with obstacles. Each aircraft is controlled by a **neural network** that acts as its "brain," making decisions based on its perception. The project uses a **NEAT evolutionary algorithm** to allow these AI players to *learn and improve* their flying skills over many generations, progressively getting smarter at navigating the game world.
 
+This project was built as an **academic and experimental platform** to explore:
+- Artificial Intelligence
+- Neural computation
+- Evolutionary learning
+- Real-time simulation systems
+
+No external machine learning or deep learning libraries are used.
 
 ## Visual Overview
 
@@ -35,6 +42,32 @@ flowchart TD
     A4 -- "Configured by" --> A5
     A5 -- "Provides central settings" --> A0
 ```
+
+### 🚀 Setup & Running
+#### 1️⃣ Clone the repository
+
+```bash
+git clone https://github.com/farhanishraq17/FlightX.git
+cd FlightX
+```
+#### 2️⃣ Create a virtual environment (recommended)
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+#### 3️⃣ Install dependencies
+```bash
+pip install -r requirements.txt
+```
+If pygame fails to install, run:
+```bash
+pip install pygame
+```
+#### 4️⃣ Run the simulation
+```bash
+python main.py
+```
+A window should open showing the FlightX simulation main - menu.
 
 ## Chapters
 
