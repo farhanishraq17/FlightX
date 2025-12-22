@@ -36,6 +36,19 @@ This project was built as an **academic and experimental platform** to explore:
 - Neural computation
 - Evolutionary learning
 - Real-time simulation systems
+
+<div align="center">
+<pre>
+╔════════════════════════════════════════════════════════════╗
+║  No external machine learning or deep learning libraries   ║
+║                 are used in this project.                  ║
+╚════════════════════════════════════════════════════════════╝
+</pre>
+  
+</div>
+
+---
+
 ## 📌 Key Highlights
 
 - Custom **Multilayer Perceptron (MLP)** implemented from first principles  
@@ -46,16 +59,6 @@ This project was built as an **academic and experimental platform** to explore:
 - Fully modular, transparent, educational codebase  
 
 ---
-
-<div align="center">
-<pre>
-╔════════════════════════════════════════════════════════════╗
-║  No external machine learning or deep learning libraries   ║
-║                 are used in this project.                  ║
-╚════════════════════════════════════════════════════════════╝
-</pre>
-</div>
-
 
 
 ## Visual Overview
