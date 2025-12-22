@@ -127,10 +127,35 @@ flowchart TD
   </tr>
 </table>
 
+---
+## 🖥️ Graph Screenshots
+
+<table align="center">
+  <tr>
+    <td align="center" valign="top">
+      <img src="Demonstration/graph1.png" alt="Ship Placement Screen" width="300"><br>
+      <em>Snap - 01</em>
+    </td>
+    <td align="center" valign="top">
+      <img src="Demonstration/graph2.png" alt="Ship Placement Screen" width="300"><br>
+      <em>Snap - 02</em>
+    </td>
+    <td align="center" valign="top">
+      <img src="Demonstration/graph3.png" alt="Gameplay Screen" width="300"><br>
+      <em>Snap - 03</em>
+    </td>
+  </tr>
+</table>
+
 --- 
 
 ## 🌍 Simulation Environment
 
+<p align="center">
+  <img src="Demonstration/Theory1.png" width="500" height="350"><br>
+  <em>Main Menu Screen</em>
+</p>
+---
 ### World Representation
 - Horizontally scrolling 2D world
 - Procedurally generated vertical pipe obstacles
