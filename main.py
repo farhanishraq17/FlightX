@@ -18,9 +18,9 @@ main_menu_bg = pygame.image.load('Assets/mainmenu.png').convert_alpha()
 population_manager = population.Population(100)
 game_state = {'pipes_spawn_time': 10}
 ui_state = {
-    'simulation_speed': 5.0,
+    'simulation_speed': 0.0,
     'slider_dragging': False,
-    'pending_planes': 100,
+    'pending_planes': 10,
     'is_paused': False,
 }
 
@@ -272,7 +272,7 @@ def draw_control_panel(menu_font):
     grey = (180, 180, 180)
 
     # Iteration counter top-right
-    iter_font = pygame.font.Font('font/Pixeltype.ttf', max(18, int(menu_font.get_height() * 0.75)))
+    iter_font = pygame.font.Font('font/Pixeltype.ttf', max(22, int(menu_font.get_height() * 0.95)))
     iter_text = iter_font.render(f'Number of Iterations: {population_manager.generation}', True, white)
     iter_rect = iter_text.get_rect(topright=(panel_rect.right - padding, panel_rect.top + padding))
     config.window.blit(iter_text, iter_rect)
@@ -320,9 +320,10 @@ def draw_control_panel(menu_font):
     btn_w = max(160, int(config.win_width * 0.18))
     btn_h = max(44, int(menu_font.get_height() * 1.6))
     pause_rect = pygame.Rect(0, 0, btn_w, btn_h)
-    pause_rect.center = (center_x, panel_rect.top + panel_rect.height * 0.4)
+    vertical_offset = max(8, int(panel_rect.height * 0.04))
+    pause_rect.center = (center_x, panel_rect.top + panel_rect.height * 0.32)
     restart_rect = pygame.Rect(0, 0, btn_w, btn_h)
-    restart_rect.center = (center_x, pause_rect.bottom + 14 + restart_rect.height // 2)
+    restart_rect.center = (center_x, pause_rect.bottom + vertical_offset + restart_rect.height // 2)
     pygame.draw.rect(config.window, white, pause_rect, border_radius=6)
     pygame.draw.rect(config.window, white, restart_rect, border_radius=6)
     pause_label = menu_font.render('Pause' if not ui_state['is_paused'] else 'Resume', True, dark)
