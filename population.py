@@ -18,7 +18,7 @@ class Population:
         for p in self.players:
             if p.alive:
                 p.look()
-                p.think()
+                p.think(self.generation)
                 p.draw(config.window)
                 p.update(config.ground)
 

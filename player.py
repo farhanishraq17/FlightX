@@ -1,4 +1,6 @@
 import pygame
+import random
+import math
 import brain
 import config
 
@@ -87,12 +89,30 @@ class Player:
         self.vision[2] = 0                                            # unused slot reserved
         self.vision[3] = self.clamp(self.vel / 10)                    # current vertical speed
 
-    def think(self):
+    def think(self, generation=1):
+        # Before the first pipe is in range, hover near screen center
+        first_pipe = self.closest_pipe()
+        if not first_pipe:
+            target_y = config.win_height * 0.5
+            if self.rect.centery < target_y - 5:
+                self.bird_drop()
+            elif self.rect.centery > target_y + 5:
+                self.bird_flap()
+            return
+
         decision = self.brain.feed_forward(self.vision)
+
+        # Anneal exploratory noise: higher early generations, near-zero after ~25
+        fail_prob = max(0.02, 0.85 * math.exp(-0.12 * max(0, generation - 1)))
+        if random.random() < fail_prob:
+            return  # deliberately skip action to allow early failures
+
+        noisy_decision = decision + random.uniform(-0.1, 0.1) * fail_prob
+
         # >0.55: small flap up; <0.45: nudge downward; middle: glide
-        if decision > 0.55:
+        if noisy_decision > 0.55:
             self.bird_flap()
-        elif decision < 0.45:
+        elif noisy_decision < 0.45:
             self.bird_drop()
 
     def calculate_fitness(self):
