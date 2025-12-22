@@ -14,7 +14,7 @@
   <table width="80%">
     <tr>
       <td style="vertical-align: top; padding-right: 20px;">
-        <strong>Authors:</strong><br>
+        <strong>Author:</strong><br>
         Md. Farhan Ishraq<br>
       </td>
       <td style="vertical-align: top; padding-left: 20px;">
@@ -35,6 +35,7 @@ This project was built as an **academic and experimental platform** to explore:
 - Neural computation
 - Evolutionary learning
 - Real-time simulation systems
+
 
 <div align="center">
 
