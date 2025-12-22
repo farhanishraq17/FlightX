@@ -1,29 +1,50 @@
-# ✈️ FlightX
+#FlightX
 
-**FlightX** is an interactive flight simulation project developed using **Python** and **Pygame**. It demonstrates core concepts of aircraft motion, real-time simulation, and user-controlled dynamics within a virtual environment. The project combines foundational aeronautical principles with game development techniques to deliver an educational and engaging simulation experience.
- 
+FlightX is an **AI simulation** where *virtual aircraft* learn to fly through a challenging environment filled with obstacles. Each aircraft is controlled by a **neural network** that acts as its "brain," making decisions based on its perception. The project uses a **NEAT evolutionary algorithm** to allow these AI players to *learn and improve* their flying skills over many generations, progressively getting smarter at navigating the game world.
+
+
+## Visual Overview
+
+```mermaid
+flowchart TD
+    A0["Game Loop & Orchestration
+"]
+    A1["AI Player (Aircraft Agent)
+"]
+    A2["Neural Network (AI Brain)
+"]
+    A3["NEAT Evolutionary Algorithm
+"]
+    A4["Game Environment & Obstacles
+"]
+    A5["Global Game Configuration
+"]
+    A0 -- "Orchestrates simulation" --> A1
+    A0 -- "Triggers evolution" --> A3
+    A0 -- "Updates & draws" --> A4
+    A0 -- "Uses & configures" --> A5
+    A1 -- "Controls with" --> A2
+    A1 -- "Interacts with" --> A4
+    A1 -- "Reads settings from" --> A5
+    A2 -- "Evolved by" --> A3
+    A3 -- "Manages & evolves" --> A1
+    A4 -- "Configured by" --> A5
+    A5 -- "Provides central settings" --> A0
+```
+
+## Chapters
+
+1. [Global Game Configuration
+](01_global_game_configuration_.md)
+2. [Game Environment & Obstacles
+](02_game_environment___obstacles_.md)
+3. [AI Player (Aircraft Agent)
+](03_ai_player__aircraft_agent__.md)
+4. [Neural Network (AI Brain)
+](04_neural_network__ai_brain__.md)
+5. [NEAT Evolutionary Algorithm
+](05_neat_evolutionary_algorithm_.md)
+6. [Game Loop & Orchestration
+](06_game_loop___orchestration_.md)
+
 ---
-
-## 🧩 Project Overview
-
-FlightX simulates an aircraft operating in a virtual environment where users can actively control movement and observe responsive, realistic motion behavior. The simulation is powered by a real-time game loop that continuously updates physics calculations, processes user input, and renders smooth animations.
-
-This project serves as:
-- A learning tool for understanding fundamental flight mechanics  
-- A foundation for developing more advanced flight simulation systems  
-- A demonstration of Python-based simulation and game development practices  
-
----
-
-## ⚙️ Features
-
-- Real-time aircraft movement simulation  
-- Intuitive keyboard-based control system  
-- Smooth animations powered by a continuous game loop  
-- Simplified flight dynamics including speed, direction, and acceleration  
-- Modular and extensible codebase for future enhancements  
-
----
-
-
-
