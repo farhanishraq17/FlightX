@@ -7,6 +7,7 @@ window = None
 fullscreen = False
 mute = False
 show_lines = False
+jump_scale = 1.0
 
 ground = None
 pipes = []

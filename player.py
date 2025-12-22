@@ -63,8 +63,8 @@ class Player:
         # Small impulse; allow repeated taps without locking out
         if not self.sky_collision():
             boost_factor = 1.02 if generation % 10 == 0 else 1.0
-            impulse = 2.2 * boost_factor
-            ceiling = -5 * boost_factor
+            impulse = 2.2 * boost_factor * config.jump_scale
+            ceiling = -5 * boost_factor * config.jump_scale
             self.vel = max(self.vel - impulse, ceiling)
 
     def bird_drop(self):

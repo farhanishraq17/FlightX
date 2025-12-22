@@ -20,6 +20,7 @@ game_state = {'pipes_spawn_time': 10, 'score': 0, 'high_score': 0}
 ui_state = {
     'simulation_speed': 0.0,
     'slider_dragging': False,
+        'jump_dragging': False,
     'is_paused': False,
 }
 
@@ -72,6 +73,12 @@ def restart_simulation():
 def update_slider_from_mouse(x_pos, track_rect):
     ratio = max(0.0, min(1.0, (x_pos - track_rect.left) / track_rect.width))
     ui_state['simulation_speed'] = round(ratio * 10.0, 2)
+
+
+def update_jump_from_mouse(x_pos, track_rect):
+    ratio = max(0.0, min(1.0, (x_pos - track_rect.left) / track_rect.width))
+    # Map to 0.5x - 2.0x
+    config.jump_scale = round(0.5 + ratio * 1.5, 2)
 
 
 def handle_common_events(event):
@@ -305,18 +312,46 @@ def draw_control_panel(menu_font):
     speed_rect = speed_label.get_rect(left=slider_track.left, top=slider_track.bottom + 6)
     config.window.blit(speed_label, speed_rect)
 
-    # Lines toggle
+    # Jump control slider
+    jump_track = pygame.Rect(slider_track.left, speed_rect.bottom + max(10, int(menu_font.get_height() * 0.4)), slider_width, 12)
+    pygame.draw.rect(config.window, grey, jump_track, border_radius=6)
+    jump_ratio = (config.jump_scale - 0.5) / 1.5
+    jump_knob_x = jump_track.left + jump_ratio * jump_track.width
+    jump_knob = pygame.Rect(0, 0, 18, 24)
+    jump_knob.center = (jump_knob_x, jump_track.centery)
+    pygame.draw.rect(config.window, white, jump_knob, border_radius=6)
+    jump_label = menu_font.render(f'Jump: {config.jump_scale:.2f}x', True, white)
+    jump_rect = jump_label.get_rect(left=jump_track.left, top=jump_track.bottom + 6)
+    config.window.blit(jump_label, jump_rect)
+
+    # Lines toggle (auto-stacks if narrow)
     toggle_w = max(180, int(config.win_width * 0.22))
     toggle_h = max(36, int(menu_font.get_height() * 1.2))
-    toggle_rect = pygame.Rect(slider_track.left, speed_rect.bottom + max(12, int(menu_font.get_height() * 0.5)), toggle_w, toggle_h)
+    toggle_gap = max(12, int(config.win_width * 0.01))
+    place_side = (panel_rect.right - padding) - (jump_track.right + toggle_gap) >= toggle_w + 12 and config.win_width >= 900
+    if place_side:
+        toggle_x = jump_track.right + toggle_gap
+        toggle_x = min(toggle_x, panel_rect.right - padding - toggle_w)
+        toggle_y = jump_track.top + max(18, int(menu_font.get_height() * 0.4))
+    else:
+        toggle_w = min(toggle_w, panel_rect.width - padding * 2)
+        toggle_x = panel_rect.left + padding
+        toggle_y = jump_rect.bottom + max(10, int(menu_font.get_height() * 0.5))
+    toggle_rect = pygame.Rect(toggle_x, toggle_y, toggle_w, toggle_h)
     pygame.draw.rect(config.window, white, toggle_rect, border_radius=6)
     toggle_label = menu_font.render(f'Lines: {"ON" if config.show_lines else "OFF"}', True, dark)
     config.window.blit(toggle_label, toggle_label.get_rect(center=toggle_rect.center))
 
-    # Pause / Restart center
-    center_x = panel_rect.centerx
+    # Pause / Restart shifted right but clamped
     btn_w = max(160, int(config.win_width * 0.18))
     btn_h = max(44, int(menu_font.get_height() * 1.6))
+    right_column_left = min(iter_rect.left, score_rect.left, high_rect.left)
+    target_x = right_column_left - padding - btn_w // 2
+    center_x = min(panel_rect.centerx + max(140, int(config.win_width * 0.12)), target_x)
+    if not config.fullscreen:
+        center_x -= max(40, int(config.win_width * 0.04))
+    center_x = max(center_x, panel_rect.left + padding + btn_w // 2)
+
     pause_rect = pygame.Rect(0, 0, btn_w, btn_h)
     vertical_offset = max(8, int(panel_rect.height * 0.04))
     pause_rect.center = (center_x, panel_rect.top + panel_rect.height * 0.32)
@@ -329,6 +364,45 @@ def draw_control_panel(menu_font):
     config.window.blit(pause_label, pause_label.get_rect(center=pause_rect.center))
     config.window.blit(restart_label, restart_label.get_rect(center=restart_rect.center))
 
+    # Info box (Reward/Punishment/Jump/Planes) floats between slider and pause/restart, above the lines toggle
+    info_font = pygame.font.Font('font/Pixeltype.ttf', max(14, int(menu_font.get_height() * 0.65)))
+    alive_count = sum(1 for p in population_manager.players if p.alive)
+    jump_factor = 1.02 if population_manager.generation % 10 == 0 else 1.0
+    jump_impulse = round(2.2 * jump_factor * config.jump_scale, 2)
+    info_items = [
+        'Reward: +7',
+        'Punishment: -1000',
+        f'Jump: {jump_impulse}',
+        f'Planes Alive: {alive_count}/{len(population_manager.players)}',
+    ]
+    line_surfs = [info_font.render(t, True, white) for t in info_items]
+    box_padding = max(5, int(config.win_width * 0.0040))
+    box_width = max(s.get_width() for s in line_surfs) + box_padding * 2
+    box_height = sum(s.get_height() for s in line_surfs) + box_padding * 2 + (len(line_surfs) - 1) * 3
+
+    min_x = slider_track.right + padding
+    max_x = pause_rect.left - padding - box_width
+    if max_x < min_x:
+        box_x = max_x
+    else:
+        box_x = min_x
+    box_x = max(panel_rect.left + padding, min(box_x, panel_rect.right - padding - box_width))
+
+    up_shift = max(4, int(menu_font.get_height() * 0.1))
+    desired_y = slider_track.top - up_shift
+    limit_y = toggle_rect.top - padding - box_height
+    box_y = max(panel_rect.top + padding, min(desired_y, limit_y))
+
+    info_box = pygame.Rect(box_x, box_y, box_width, box_height)
+    pygame.draw.rect(config.window, (30, 30, 30), info_box, border_radius=6)
+    pygame.draw.rect(config.window, white, info_box, width=1, border_radius=6)
+
+    cursor_y = info_box.top + box_padding
+    for surf in line_surfs:
+        rect = surf.get_rect(left=info_box.left + box_padding, top=cursor_y)
+        config.window.blit(surf, rect)
+        cursor_y += surf.get_height() + 3
+
     # Back to menu bottom-right
     back_rect = pygame.Rect(0, 0, max(260, int(config.win_width * 0.24)), max(48, int(menu_font.get_height() * 1.6)))
     back_rect.bottomright = (panel_rect.right - padding, panel_rect.bottom - padding)
@@ -339,6 +413,8 @@ def draw_control_panel(menu_font):
     return {
         'slider_track': slider_track,
         'slider_knob': knob_rect,
+        'jump_track': jump_track,
+        'jump_knob': jump_knob,
         'lines_toggle': toggle_rect,
         'pause': pause_rect,
         'restart': restart_rect,
@@ -396,6 +472,9 @@ def main():
                     if control_rects['slider_track'].collidepoint(event.pos) or control_rects['slider_knob'].collidepoint(event.pos):
                         ui_state['slider_dragging'] = True
                         update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
+                    elif control_rects['jump_track'].collidepoint(event.pos) or control_rects['jump_knob'].collidepoint(event.pos):
+                        ui_state['jump_dragging'] = True
+                        update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
                     elif control_rects['lines_toggle'].collidepoint(event.pos):
                         config.show_lines = not config.show_lines
                     elif control_rects['pause'].collidepoint(event.pos):
@@ -406,8 +485,11 @@ def main():
                         state = MENU_MAIN
                 if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                     ui_state['slider_dragging'] = False
+                    ui_state['jump_dragging'] = False
                 if event.type == pygame.MOUSEMOTION and ui_state['slider_dragging']:
                     update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
+                if event.type == pygame.MOUSEMOTION and ui_state['jump_dragging']:
+                    update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = MENU_MAIN
 
