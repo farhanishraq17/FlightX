@@ -48,15 +48,14 @@ This project was built as an **academic and experimental platform** to explore:
 ---
 
 <div align="center">
-
-
-```
+<pre>
 ╔════════════════════════════════════════════════════════════╗
 ║  No external machine learning or deep learning libraries   ║
 ║                 are used in this project.                  ║
 ╚════════════════════════════════════════════════════════════╝
-```
+</pre>
 </div>
+
 
 
 ## Visual Overview
