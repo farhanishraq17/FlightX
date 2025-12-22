@@ -35,6 +35,13 @@ ui_state = {
     'is_paused': False,
 }
 
+music_tracks = {
+    'menu': 'Audio/main_menu.wav',
+    'none': None,
+}
+current_music = None
+click_sound = None
+
 MENU_MAIN = 'main'
 MENU_INSTRUCTIONS = 'instructions'
 MENU_GAME = 'game'
@@ -50,6 +57,20 @@ def get_fonts():
         pygame.font.Font('font/Pixeltype.ttf', menu_size),
         pygame.font.Font('font/Pixeltype.ttf', author_size),
     )
+
+
+def load_sounds():
+    global click_sound
+    try:
+        click_sound = pygame.mixer.Sound('Audio/press_button.mp3')
+        click_sound.set_volume(0.6)
+    except pygame.error:
+        click_sound = None
+
+
+def play_click():
+    if click_sound and not config.mute:
+        click_sound.play()
 
 
 def generate_pipes():
@@ -82,6 +103,7 @@ def restart_simulation():
     graph_state['data'].clear()
     graph_state['last_logged_gen'] = None
     graph_state['dirty'] = False
+    load_sounds()
 
 
 def update_slider_from_mouse(x_pos, track_rect):
@@ -104,12 +126,37 @@ def handle_common_events(event):
             config.toggle_fullscreen()
         if event.key == pygame.K_m:
             config.mute = not config.mute
-            if config.mute:
-                pygame.mixer.pause()
-            else:
-                pygame.mixer.unpause()
+            set_music(current_music or 'menu')
     if event.type == pygame.VIDEORESIZE:
         config.resize(event.w, event.h)
+
+
+def set_music(track):
+    global current_music
+    # If muted, pause and zero volume regardless of requested track
+    if config.mute:
+        pygame.mixer.music.pause()
+        pygame.mixer.music.set_volume(0.0)
+        return
+
+    # Unmuted path: ensure correct track is playing
+    if track is None or music_tracks.get(track) is None:
+        pygame.mixer.music.stop()
+        current_music = None
+        return
+
+    path = music_tracks.get(track)
+    if current_music != track:
+        try:
+            pygame.mixer.music.load(path)
+            pygame.mixer.music.play(-1)
+            current_music = track
+        except pygame.error:
+            current_music = None
+            return
+
+    pygame.mixer.music.set_volume(1.0)
+    pygame.mixer.music.unpause()
 
 
 def layout_main_menu(title_font, menu_font, author_font):
@@ -118,7 +165,7 @@ def layout_main_menu(title_font, menu_font, author_font):
     gap = max(10, int(min_side * 0.015))
 
     title_surf = title_font.render('FlightX', True, (255, 255, 255))
-    start_surf = menu_font.render('Start Game', True, (0, 0, 0))
+    start_surf = menu_font.render('Start Simulation', True, (0, 0, 0))
     instruction_surf = menu_font.render('Instruction Manual', True, (0, 0, 0))
     mute_surf = menu_font.render(f'Audio: {"Off" if config.mute else "On"}', True, (0, 0, 0))
     exit_surf = menu_font.render('Exit', True, (0, 0, 0))
@@ -554,6 +601,8 @@ def draw_control_panel(menu_font):
 
 def main():
     state = MENU_MAIN
+    load_sounds()
+    set_music('menu')
     while True:
         title_font, menu_font, author_font = get_fonts()
         events = pygame.event.get()
@@ -578,25 +627,28 @@ def main():
                     for _, rect, action in buttons:
                         if rect.collidepoint(mouse_pos):
                             if action == 'start':
+                                play_click()
                                 state = MENU_GAME
                                 config.pipes.clear()
                                 game_state['pipes_spawn_time'] = 10
                                 game_state['score'] = 0
                                 game_state['high_score'] = 0
                             elif action == 'instructions':
+                                play_click()
                                 state = MENU_INSTRUCTIONS
+                                set_music('menu')
                             elif action == 'audio':
+                                play_click()
                                 config.mute = not config.mute
-                                if config.mute:
-                                    pygame.mixer.pause()
-                                else:
-                                    pygame.mixer.unpause()
+                                set_music('menu')
                             elif action == 'exit':
+                                play_click()
                                 pygame.quit()
                                 exit()
             elif state == MENU_INSTRUCTIONS:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = MENU_MAIN
+                    set_music('menu')
             elif state == MENU_GAME:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if control_rects['slider_track'].collidepoint(event.pos) or control_rects['slider_knob'].collidepoint(event.pos):
@@ -606,16 +658,22 @@ def main():
                         ui_state['jump_dragging'] = True
                         update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
                     elif control_rects['lines_toggle'].collidepoint(event.pos):
+                        play_click()
                         config.show_lines = not config.show_lines
                     elif control_rects['graph'].collidepoint(event.pos):
+                        play_click()
                         graph_state['dirty'] = True
                         show_graph_window()
                     elif control_rects['pause'].collidepoint(event.pos):
+                        play_click()
                         ui_state['is_paused'] = not ui_state['is_paused']
                     elif control_rects['restart'].collidepoint(event.pos):
+                        play_click()
                         restart_simulation()
                     elif control_rects['back'].collidepoint(event.pos):
+                        play_click()
                         state = MENU_MAIN
+                        set_music('menu')
                 if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                     ui_state['slider_dragging'] = False
                     ui_state['jump_dragging'] = False
@@ -625,6 +683,7 @@ def main():
                     update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = MENU_MAIN
+                    set_music('menu')
 
         pygame.display.flip()
         clock.tick(60)
