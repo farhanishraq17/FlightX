@@ -11,7 +11,8 @@ class Player:
             pygame.image.load('Assets/hk_1.png').convert_alpha(), (40, 40))
         self.hk_air = pygame.transform.smoothscale(
             pygame.image.load('Assets/hk_2.png').convert_alpha(), (40, 40))
-        self.rect = self.hk_run.get_rect(topleft=(self.x, self.y))
+        self.rect = self.hk_run.get_rect(topleft=(self.x, self.y)).inflate(-12, -12)
+
         self.vel = 0
         self.flap = False
         self.alive = True
@@ -35,13 +36,18 @@ class Player:
         return pygame.Rect.colliderect(self.rect, ground)
 
     def sky_collision(self):
-        return bool(self.rect.y < 30)
+        return self.rect.top < 0
+
 
     def pipe_collision(self):
-        for p in config.pipes:
-            if pygame.Rect.colliderect(self.rect, p.top_rect) or pygame.Rect.colliderect(self.rect, p.bottom_rect):
-                return True
+        closest = self.closest_pipe()
+        if closest:
+            return (
+                self.rect.colliderect(closest.top_rect) or
+                self.rect.colliderect(closest.bottom_rect)
+            )
         return False
+
 
     def update(self, ground):
         if not (self.ground_collision(ground) or self.pipe_collision()):
@@ -71,8 +77,8 @@ class Player:
         for p in config.pipes:
             if not p.passed:
                 return p
-        if config.pipes:
-            return config.pipes[0]
+        return None
+
 
     # AI related functions
     def look(self):
