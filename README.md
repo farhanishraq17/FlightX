@@ -153,8 +153,9 @@ flowchart TD
 
 <p align="center">
   <img src="Demonstration/Theory1.png" width="500" height="350"><br>
-  <em>Main Menu Screen</em>
+  <em>Diagram : Agent - Environment Interface</em>
 </p>
+
 ---
 ### World Representation
 - Horizontally scrolling 2D world
