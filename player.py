@@ -59,10 +59,13 @@ class Player:
             self.alive = False
             self.vel = 0
 
-    def bird_flap(self):
+    def bird_flap(self, generation=1):
         # Small impulse; allow repeated taps without locking out
         if not self.sky_collision():
-            self.vel = max(self.vel - 2.2, -5)
+            boost_factor = 1.02 if generation % 10 == 0 else 1.0
+            impulse = 2.2 * boost_factor
+            ceiling = -5 * boost_factor
+            self.vel = max(self.vel - impulse, ceiling)
 
     def bird_drop(self):
         # Allow intentional faster descent
@@ -89,6 +92,10 @@ class Player:
         self.vision[2] = 0                                            # unused slot reserved
         self.vision[3] = self.clamp(self.vel / 10)                    # current vertical speed
 
+        if config.show_lines:
+            pygame.draw.line(config.window, (255, 255, 255), self.rect.center, (self.rect.centerx, gap))
+            pygame.draw.line(config.window, (255, 255, 255), self.rect.center, (p.x, self.rect.centery))
+
     def think(self, generation=1):
         # Before the first pipe is in range, hover near screen center
         first_pipe = self.closest_pipe()
@@ -97,7 +104,7 @@ class Player:
             if self.rect.centery < target_y - 5:
                 self.bird_drop()
             elif self.rect.centery > target_y + 5:
-                self.bird_flap()
+                self.bird_flap(generation)
             return
 
         decision = self.brain.feed_forward(self.vision)
@@ -111,7 +118,7 @@ class Player:
 
         # >0.55: small flap up; <0.45: nudge downward; middle: glide
         if noisy_decision > 0.55:
-            self.bird_flap()
+            self.bird_flap(generation)
         elif noisy_decision < 0.45:
             self.bird_drop()
 

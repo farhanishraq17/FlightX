@@ -16,11 +16,10 @@ background_bottom = pygame.image.load('Assets/dark1.jpg').convert()
 main_menu_bg = pygame.image.load('Assets/mainmenu.png').convert_alpha()
 
 population_manager = population.Population(100)
-game_state = {'pipes_spawn_time': 10}
+game_state = {'pipes_spawn_time': 10, 'score': 0, 'high_score': 0}
 ui_state = {
     'simulation_speed': 0.0,
     'slider_dragging': False,
-    'pending_planes': 10,
     'is_paused': False,
 }
 
@@ -61,10 +60,12 @@ def draw_background():
 
 def restart_simulation():
     global population_manager
-    population_manager = population.Population(ui_state['pending_planes'])
+    population_manager = population.Population(100)
     population_manager.generation = 0
     config.pipes.clear()
     game_state['pipes_spawn_time'] = 10
+    game_state['score'] = 0
+    game_state['high_score'] = 0
     ui_state['is_paused'] = False
 
 
@@ -185,6 +186,11 @@ def run_game_step():
 
         for p in list(config.pipes):
             p.update()
+            if p.passed and not p.counted:
+                game_state['score'] += 1
+                if game_state['score'] > game_state['high_score']:
+                    game_state['high_score'] = game_state['score']
+                p.counted = True
             if p.off_screen:
                 config.pipes.remove(p)
 
@@ -193,6 +199,7 @@ def run_game_step():
         else:
             config.pipes.clear()
             population_manager.natural_selection()
+            game_state['score'] = 0
 
     if not ui_state['is_paused']:
         ticks = max(1, int(round(ui_state['simulation_speed'])))
@@ -277,6 +284,15 @@ def draw_control_panel(menu_font):
     iter_rect = iter_text.get_rect(topright=(panel_rect.right - padding, panel_rect.top + padding))
     config.window.blit(iter_text, iter_rect)
 
+    score_text = iter_font.render(f'Score: {game_state["score"]}', True, white)
+    score_rect = score_text.get_rect(topright=(panel_rect.right - padding, iter_rect.bottom + 8))
+
+    high_text = iter_font.render(f'Max Score: {game_state["high_score"]}', True, white)
+    high_rect = high_text.get_rect(topright=(score_rect.left - padding, score_rect.top))
+
+    config.window.blit(high_text, high_rect)
+    config.window.blit(score_text, score_rect)
+
     # Simulation speed slider top-left
     slider_width = max(180, int(config.win_width * 0.22))
     slider_track = pygame.Rect(panel_rect.left + padding, panel_rect.top + padding, slider_width, 12)
@@ -289,31 +305,13 @@ def draw_control_panel(menu_font):
     speed_rect = speed_label.get_rect(left=slider_track.left, top=slider_track.bottom + 6)
     config.window.blit(speed_label, speed_rect)
 
-    # Plane count controls
-    plane_y = speed_rect.bottom + max(6, int(menu_font.get_height() * 0.3))
-    label_surf = menu_font.render('Planes:', True, white)
-    label_rect = label_surf.get_rect(left=slider_track.left, centery=plane_y + menu_font.get_height() // 2)
-
-    minus_size = max(28, int(menu_font.get_height() * 1.1))
-    btn_gap = max(16, int(config.win_width * 0.01))
-    count_surf = menu_font.render(str(ui_state['pending_planes']), True, white)
-
-    # Horizontal layout computed from left to right
-    x_cursor = label_rect.right + btn_gap
-    minus_rect = pygame.Rect(x_cursor, plane_y, minus_size, minus_size)
-    x_cursor = minus_rect.right + btn_gap
-    count_rect = count_surf.get_rect(topleft=(x_cursor, plane_y + (minus_size - count_surf.get_height()) // 2))
-    x_cursor = count_rect.right + btn_gap
-    plus_rect = pygame.Rect(x_cursor, plane_y, minus_size, minus_size)
-
-    pygame.draw.rect(config.window, white, minus_rect, border_radius=4)
-    pygame.draw.rect(config.window, white, plus_rect, border_radius=4)
-    minus_label = menu_font.render('-', True, dark)
-    plus_label = menu_font.render('+', True, dark)
-    config.window.blit(label_surf, label_rect)
-    config.window.blit(minus_label, minus_label.get_rect(center=minus_rect.center))
-    config.window.blit(plus_label, plus_label.get_rect(center=plus_rect.center))
-    config.window.blit(count_surf, count_rect)
+    # Lines toggle
+    toggle_w = max(180, int(config.win_width * 0.22))
+    toggle_h = max(36, int(menu_font.get_height() * 1.2))
+    toggle_rect = pygame.Rect(slider_track.left, speed_rect.bottom + max(12, int(menu_font.get_height() * 0.5)), toggle_w, toggle_h)
+    pygame.draw.rect(config.window, white, toggle_rect, border_radius=6)
+    toggle_label = menu_font.render(f'Lines: {"ON" if config.show_lines else "OFF"}', True, dark)
+    config.window.blit(toggle_label, toggle_label.get_rect(center=toggle_rect.center))
 
     # Pause / Restart center
     center_x = panel_rect.centerx
@@ -341,8 +339,7 @@ def draw_control_panel(menu_font):
     return {
         'slider_track': slider_track,
         'slider_knob': knob_rect,
-        'minus': minus_rect,
-        'plus': plus_rect,
+        'lines_toggle': toggle_rect,
         'pause': pause_rect,
         'restart': restart_rect,
         'back': back_rect,
@@ -378,6 +375,8 @@ def main():
                                 state = MENU_GAME
                                 config.pipes.clear()
                                 game_state['pipes_spawn_time'] = 10
+                                game_state['score'] = 0
+                                game_state['high_score'] = 0
                             elif action == 'instructions':
                                 state = MENU_INSTRUCTIONS
                             elif action == 'audio':
@@ -397,10 +396,8 @@ def main():
                     if control_rects['slider_track'].collidepoint(event.pos) or control_rects['slider_knob'].collidepoint(event.pos):
                         ui_state['slider_dragging'] = True
                         update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
-                    elif control_rects['minus'].collidepoint(event.pos):
-                        ui_state['pending_planes'] = max(1, ui_state['pending_planes'] - 1)
-                    elif control_rects['plus'].collidepoint(event.pos):
-                        ui_state['pending_planes'] = min(1000, ui_state['pending_planes'] + 1)
+                    elif control_rects['lines_toggle'].collidepoint(event.pos):
+                        config.show_lines = not config.show_lines
                     elif control_rects['pause'].collidepoint(event.pos):
                         ui_state['is_paused'] = not ui_state['is_paused']
                     elif control_rects['restart'].collidepoint(event.pos):

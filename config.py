@@ -6,6 +6,7 @@ win_width = 900
 window = None
 fullscreen = False
 mute = False
+show_lines = False
 
 ground = None
 pipes = []

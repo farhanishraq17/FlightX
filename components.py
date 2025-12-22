@@ -24,6 +24,7 @@ class Pipes:
         self.top_height = Ground.ground_level - self.bottom_height - self.opening
         self.bottom_rect, self.top_rect = pygame.Rect(0, 0, 0, 0), pygame.Rect(0, 0, 0, 0)
         self.passed = False
+        self.counted = False
         self.off_screen = False
 
     def draw(self, window):
