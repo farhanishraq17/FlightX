@@ -11,10 +11,10 @@ class Player:
         # Bird
         self.x, self.y = 50, 200
         self.hk_run = pygame.transform.smoothscale(
-            pygame.image.load('Assets/hk_1.png').convert_alpha(), (40, 40)
+            pygame.image.load('Assets/plane1.png').convert_alpha(), (40, 40)
         )
         self.hk_air = pygame.transform.smoothscale(
-            pygame.image.load('Assets/hk_2.png').convert_alpha(), (40, 40)
+            pygame.image.load('Assets/plane1.png').convert_alpha(), (40, 40)
         )
 
         self.rect = self.hk_run.get_rect(topleft=(self.x, self.y)).inflate(-12, -12)

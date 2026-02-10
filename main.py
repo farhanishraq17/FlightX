@@ -510,10 +510,6 @@ def run_pvc_game_step():
          msg = font.render("GAME OVER - Press ESC", True, (255, 0, 0))
          config.window.blit(msg, (config.win_width//2 - 100, config.win_height//2))
     
-    if ai and ai.alive:
-         # Draw AI brain small
-         draw_neural_net(config.window, ai.brain, pygame.Rect(config.win_width - 210, 10, 200, 150))
-         
     # Labels
     if human:
          h_color = (50, 255, 50) 
