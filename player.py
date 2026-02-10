@@ -6,7 +6,8 @@ import config
 
 
 class Player:
-    def __init__(self):
+    def __init__(self, is_human=False):
+        self.is_human = is_human
         # Bird
         self.x, self.y = 50, 200
         self.hk_run = pygame.transform.smoothscale(
@@ -24,6 +25,7 @@ class Player:
         self.lifespan = 0
         self.vision = [0, 0, 0, 0]
         self.fitness = 0
+        self.score = 0
         self.inputs = 4
 
         self.brain = brain.Brain(self.inputs)
@@ -35,6 +37,12 @@ class Player:
     # ---------------- Game Logic ----------------
     def draw(self, window):
         sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        
+        # Draw human player with a different color/tint or marker
+        if self.is_human:
+             # Just a simple indicator for now, maybe a circle around it
+             pygame.draw.circle(window, (50, 255, 50), self.rect.center, 25, 2)
+             
         window.blit(sprite, self.rect)
 
     def ground_collision(self, ground):
@@ -63,8 +71,10 @@ class Player:
         # Small impulse; allow repeated taps without locking out
         if not self.sky_collision():
             boost_factor = 1.02 if generation % 10 == 0 else 1.0
-            impulse = 2.2 * boost_factor * config.jump_scale
-            ceiling = -5 * boost_factor * config.jump_scale
+            # Human players get much stronger jump
+            human_multiplier = 3.5 if self.is_human else 1.0
+            impulse = 2.2 * boost_factor * config.jump_scale * human_multiplier
+            ceiling = -5 * boost_factor * config.jump_scale * human_multiplier
             self.vel = max(self.vel - impulse, ceiling)
 
     def bird_drop(self):
@@ -89,7 +99,7 @@ class Player:
         gap = (p.top_rect.bottom + p.bottom_rect.top) / 2
         self.vision[0] = self.clamp((self.rect.centery - gap) / 250)  # vertical offset to gap
         self.vision[1] = self.clamp((p.x - self.rect.centerx) / 400)   # horizontal distance to pipe
-        self.vision[2] = 0                                            # unused slot reserved
+        self.vision[2] = self.clamp(p.opening / 150)                   # gap size (normalized)
         self.vision[3] = self.clamp(self.vel / 10)                    # current vertical speed
 
         if config.show_lines:
@@ -97,6 +107,9 @@ class Player:
             pygame.draw.line(config.window, (255, 255, 255), self.rect.center, (p.x, self.rect.centery))
 
     def think(self, generation=1):
+        if self.is_human:
+            return
+
         # Before the first pipe is in range, hover near screen center
         first_pipe = self.closest_pipe()
         if not first_pipe:
@@ -124,9 +137,18 @@ class Player:
 
     def calculate_fitness(self):
         center_penalty = abs(self.vision[0])
-        self.fitness = self.lifespan * 1.5 - center_penalty * 100
+        self.fitness = self.lifespan + (self.score * 500) - (center_penalty * 50)
 
     def clone(self):
         clone = Player()
         clone.brain = self.brain.clone()
         return clone
+
+    def handle_event(self, event):
+        if not self.is_human:
+            return
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE or event.key == pygame.K_UP:
+                self.bird_flap()
+            if event.key == pygame.K_DOWN:
+                self.bird_drop()

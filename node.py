@@ -13,7 +13,7 @@ class Node:
         def sigmoid(x):
             return 1 / (1 + math.exp(-x))
 
-        if self.layer == 1:
+        if self.layer > 0:
             self.output_value = sigmoid(self.input_value)
 
         for c in self.connections:

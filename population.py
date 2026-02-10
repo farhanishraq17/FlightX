@@ -3,7 +3,7 @@ import player
 import math
 import species
 import operator
-
+import pickle
 
 class Population:
     def __init__(self, size):
@@ -119,6 +119,46 @@ class Population:
             if p.alive:
                 extinct = False
         return extinct
+
+    def save_champion(self, filename='champion.pkl'):
+        # Find global best player
+        if not self.species:
+            return False
+            
+        best_species = max(self.species, key=lambda s: s.benchmark_fitness)
+        champion = best_species.champion
+        
+        try:
+            with open(filename, 'wb') as f:
+                pickle.dump(champion.brain, f)
+            print(f"Saved champion brain to {filename}")
+            return True
+        except Exception as e:
+            print(f"Error saving champion: {e}")
+            return False
+
+    def load_champion(self, filename='champion.pkl'):
+        try:
+            with open(filename, 'rb') as f:
+                brain = pickle.load(f)
+                
+            # clear current population
+            self.players = []
+            self.species = []
+            
+            # Create a population based on this brain
+            for _ in range(self.size):
+                p = player.Player()
+                p.brain = brain.clone()
+                p.brain.mutate() # Small mutation to create diversity
+                self.players.append(p)
+                
+            self.generation = 1
+            print(f"Loaded champion from {filename}")
+            return True
+        except Exception as e:
+            print(f"Error loading champion: {e}")
+            return False
 
 
 

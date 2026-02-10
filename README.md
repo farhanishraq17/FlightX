@@ -275,3 +275,40 @@ pip install pygame
 python main.py
 ```
 
+---
+
+## 🎮 Controls & Features
+
+### Simulation Mode Controls
+
+| Key | Action |
+|-----|--------|
+| **S** | Save the current champion (best AI) to `champion.pkl` |
+| **L** | Load a saved champion and seed the population |
+| **ESC** | Return to main menu |
+
+### Human vs AI Mode Controls
+
+| Key | Action |
+|-----|--------|
+| **SPACEBAR** or **↑** | Flap upward (jump) |
+| **↓** | Accelerate downward |
+| **ESC** | Return to main menu |
+
+### Control Panel Features
+
+- **Speed Slider**: Adjust simulation speed
+- **Jump Slider**: Adjust jump force
+- **Lines Toggle**: Show/hide vision lines
+- **Graph Button**: Generate performance graphs
+- **Pause/Resume**: Pause or resume the simulation
+- **Restart**: Reset the current generation
+
+### Saving & Loading AI
+
+1. **To Save**: Press **S** during simulation to save the best-performing AI brain
+2. **To Load**: Press **L** to load a previously saved champion
+3. **File Location**: Champion is saved as `champion.pkl` in the project directory
+4. **Use in PvC**: Saved champions are automatically loaded in "Human vs AI" mode
+
+---

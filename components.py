@@ -16,9 +16,11 @@ class Ground:
 
 class Pipes:
     width = 15
-    opening = 100
+    width = 15
+    # opening = 100  # Removed static opening
 
     def __init__(self, win_width):
+        self.opening = random.randint(90, 130)
         self.x = win_width
         self.bottom_height = random.randint(10, 300)
         self.top_height = Ground.ground_level - self.bottom_height - self.opening

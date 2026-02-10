@@ -4,37 +4,76 @@ import connection
 
 
 class Brain:
-    def __init__(self, inputs, clone=False):
+    def __init__(self, inputs, hidden_layers=None, clone=False):
         self.inputs = inputs
+        self.hidden_layers = hidden_layers if hidden_layers else []
         self.nodes = []
         self.connections = []
-        self.layers = 2
+        self.layers = 2 + len(self.hidden_layers)
         self.net = []
+        
+        # Node IDs - Always calculate these
         self.bias_index = self.inputs
-        self.output_index = self.inputs + 1
-        self.bias_node = None
-        self.output_node = None
-
+        
+        # Calculate output node index based on total nodes
+        # Inputs (0 to inputs-1) + Bias (inputs) + Hidden Nodes + Output
+        current_id = self.inputs + 1
+        for h_count in self.hidden_layers:
+            current_id += h_count
+        self.output_index = current_id
+        
         if not clone:
-            # Input nodes
+            # Reset current_id for actual node creation
+            current_id = self.inputs + 1
+            
+            # Input nodes (Layer 0)
             for i in range(self.inputs):
-                self.nodes.append(node.Node(i))
-                self.nodes[i].layer = 0
+                n = node.Node(i)
+                n.layer = 0
+                self.nodes.append(n)
 
-            # Bias node
-            self.nodes.append(node.Node(self.bias_index))
-            self.nodes[self.bias_index].layer = 0
-            self.bias_node = self.nodes[self.bias_index]
+            # Bias node (Layer 0)
+            n_bias = node.Node(self.bias_index)
+            n_bias.layer = 0
+            self.nodes.append(n_bias)
+            self.bias_node = n_bias
 
-            # Output node
-            self.nodes.append(node.Node(self.output_index))
-            self.nodes[self.output_index].layer = 1
-            self.output_node = self.nodes[self.output_index]
+            # Hidden layers
+            hidden_node_ids = []
+            for i, h_count in enumerate(self.hidden_layers):
+                layer_ids = []
+                for _ in range(h_count):
+                    n = node.Node(current_id)
+                    n.layer = i + 1  # 0 is input, so hidden starts at 1
+                    self.nodes.append(n)
+                    layer_ids.append(current_id)
+                    current_id += 1
+                hidden_node_ids.append(layer_ids)
 
-            # Connections
-            for i in range(self.output_index + 1):
+            # Output node (Last Layer)
+            n_out = node.Node(self.output_index)
+            n_out.layer = self.layers - 1
+            self.nodes.append(n_out)
+            self.output_node = n_out
+
+            # Connections: Fully connected between adjacent layers
+            # Layer 0 (Inputs+Bias) -> Layer 1 (First Hidden or Output)
+            prev_layer_nodes = [n for n in self.nodes if n.layer == 0]
+            
+            # Connect through hidden layers
+            for i in range(len(self.hidden_layers)):
+                current_layer_nodes = [n for n in self.nodes if n.layer == i + 1]
+                for prev in prev_layer_nodes:
+                    for curr in current_layer_nodes:
+                        self.connections.append(
+                            connection.Connection(prev, curr, random.uniform(-1, 1))
+                        )
+                prev_layer_nodes = current_layer_nodes
+
+            # Connect last layer to output
+            for prev in prev_layer_nodes:
                 self.connections.append(
-                    connection.Connection(self.nodes[i], self.output_node, random.uniform(-1, 1))
+                    connection.Connection(prev, self.output_node, random.uniform(-1, 1))
                 )
 
     def connect_nodes(self):
@@ -71,7 +110,7 @@ class Brain:
         return output
 
     def clone(self):
-        clone = Brain(self.inputs, True)
+        clone = Brain(self.inputs, self.hidden_layers, True)
 
         for n in self.nodes:
             clone.nodes.append(n.clone())

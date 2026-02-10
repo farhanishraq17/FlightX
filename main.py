@@ -34,6 +34,11 @@ ui_state = {
         'jump_dragging': False,
     'is_paused': False,
 }
+notification_state = {
+    'message': '',
+    'timer': 0,
+    'duration': 120  # frames (2 seconds at 60fps)
+}
 
 music_tracks = {
     'menu': 'Audio/main_menu.wav',
@@ -41,10 +46,12 @@ music_tracks = {
 }
 current_music = None
 click_sound = None
+pvc_players = []
 
 MENU_MAIN = 'main'
 MENU_INSTRUCTIONS = 'instructions'
 MENU_GAME = 'game'
+MENU_PVC = 'pvc'
 
 
 def get_fonts():
@@ -166,6 +173,7 @@ def layout_main_menu(title_font, menu_font, author_font):
 
     title_surf = title_font.render('FlightX', True, (255, 255, 255))
     start_surf = menu_font.render('Start Simulation', True, (0, 0, 0))
+    pvc_surf = menu_font.render('Human vs AI', True, (0, 0, 0))
     instruction_surf = menu_font.render('Instruction Manual', True, (0, 0, 0))
     mute_surf = menu_font.render(f'Audio: {"Off" if config.mute else "On"}', True, (0, 0, 0))
     exit_surf = menu_font.render('Exit', True, (0, 0, 0))
@@ -173,8 +181,8 @@ def layout_main_menu(title_font, menu_font, author_font):
 
     title_rect = title_surf.get_rect(center=(config.win_width // 2, int(config.win_height * 0.28)))
 
-    option_surfaces = [start_surf, instruction_surf, mute_surf, exit_surf]
-    option_actions = ['start', 'instructions', 'audio', 'exit']
+    option_surfaces = [start_surf, pvc_surf, instruction_surf, mute_surf, exit_surf]
+    option_actions = ['start', 'pvc', 'instructions', 'audio', 'exit']
 
     btn_height = max(s.get_height() + padding * 2 for s in option_surfaces)
     total_height = btn_height * len(option_surfaces) + gap * (len(option_surfaces) - 1)
@@ -241,6 +249,45 @@ def draw_main_menu(layout):
     return buttons
 
 
+def show_notification(message):
+    """Display a notification message on screen"""
+    notification_state['message'] = message
+    notification_state['timer'] = notification_state['duration']
+
+
+def render_notification():
+    """Render the current notification if active"""
+    if notification_state['timer'] > 0:
+        notification_state['timer'] -= 1
+        
+        # Create semi-transparent background
+        notif_font = pygame.font.Font('font/Pixeltype.ttf', 36)
+        text = notif_font.render(notification_state['message'], True, (255, 255, 255))
+        
+        # Calculate position (top center)
+        padding = 20
+        bg_width = text.get_width() + padding * 2
+        bg_height = text.get_height() + padding
+        bg_x = (config.win_width - bg_width) // 2
+        bg_y = 80
+        
+        # Draw background with fade effect
+        alpha = min(255, notification_state['timer'] * 4) if notification_state['timer'] < 64 else 255
+        bg_surface = pygame.Surface((bg_width, bg_height))
+        bg_surface.set_alpha(alpha)
+        bg_surface.fill((40, 40, 60))
+        config.window.blit(bg_surface, (bg_x, bg_y))
+        
+        # Draw border
+        pygame.draw.rect(config.window, (100, 200, 255), 
+                        (bg_x, bg_y, bg_width, bg_height), 2)
+        
+        # Draw text
+        text_surface = text.copy()
+        text_surface.set_alpha(alpha)
+        config.window.blit(text_surface, (bg_x + padding, bg_y + padding // 2))
+
+
 def update_graph_data():
     # Capture score every 3 iterations (generations)
     current_gen = population_manager.generation
@@ -300,6 +347,48 @@ def render_graph(save_path=None, show_window=False, force=False):
     graph_state['dirty'] = False
 
 
+def draw_neural_net(window, brain, rect):
+    # Draw background for net
+    pygame.draw.rect(window, (20, 20, 20, 200), rect, border_radius=8)
+    
+    # Define layer positions
+    layer_count = brain.layers
+    layer_spacing = rect.width / (layer_count + 1)
+    
+    node_positions = {} # id -> (x, y)
+    
+    # Calculate positions
+    for l in range(layer_count):
+        layer_nodes = [n for n in brain.nodes if n.layer == l]
+        node_count = len(layer_nodes)
+        node_spacing = rect.height / (node_count + 1)
+        
+        x = rect.left + layer_spacing * (l + 1)
+        for i, n in enumerate(layer_nodes):
+            y = rect.top + node_spacing * (i + 1)
+            node_positions[n.id] = (x, y)
+
+    # Draw connections
+    for c in brain.connections:
+        start = node_positions.get(c.from_node.id)
+        end = node_positions.get(c.to_node.id)
+        if start and end:
+            color = (0, 255, 0) if c.weight > 0 else (255, 0, 0)
+            width = max(1, int(abs(c.weight) * 3))
+            pygame.draw.line(window, color, start, end, width)
+
+    # Draw nodes
+    for n in brain.nodes:
+        pos = node_positions.get(n.id)
+        if pos:
+            val = n.output_value
+            # Intensity based on activation
+            intensity = int(255 * val) if n.layer > 0 else 255
+            color = (intensity, intensity, intensity)
+            pygame.draw.circle(window, color, (int(pos[0]), int(pos[1])), 6)
+            pygame.draw.circle(window, (255, 255, 255), (int(pos[0]), int(pos[1])), 6, 1)
+
+
 def generate_graph_image(force=False):
     render_graph(save_path='score_graph.png', show_window=False, force=force)
 
@@ -326,6 +415,12 @@ def run_game_step():
                 if game_state['score'] > game_state['high_score']:
                     game_state['high_score'] = game_state['score']
                 p.counted = True
+                
+                # Update individual player scores for fitness
+                for player in population_manager.players:
+                    if player.alive:
+                        player.score += 1
+                        
             if p.off_screen:
                 config.pipes.remove(p)
 
@@ -346,6 +441,91 @@ def run_game_step():
     for pl in population_manager.players:
         if pl.alive:
             pl.draw(config.window)
+            
+    # Draw Neural Net of best player
+    if population_manager.players:
+        best_player = max(population_manager.players, key=lambda p: p.fitness) if population_manager.players else None
+        if best_player and best_player.alive:
+             draw_neural_net(config.window, best_player.brain, pygame.Rect(10, config.win_height - 160, 200, 150))
+    
+    # Render notifications
+    render_notification()
+
+
+def run_pvc_game_step():
+    draw_background()
+    config.ground.draw(config.window)
+
+    def simulation_tick():
+        if game_state['pipes_spawn_time'] <= 0:
+            generate_pipes()
+            game_state['pipes_spawn_time'] = 200
+        game_state['pipes_spawn_time'] -= 1
+
+        for p in list(config.pipes):
+            p.update()
+            if p.passed and not p.counted:
+                 game_state['score'] += 1
+                 p.counted = True
+                 
+            if p.off_screen:
+                config.pipes.remove(p)
+
+        # Update Players
+        human_alive = False
+        for p in pvc_players:
+            if p.alive:
+                p.look()
+                # Use high generation number for AI to eliminate random failures
+                p.think(generation=100 if not p.is_human else 1)
+                p.update(config.ground)
+                if p.is_human:
+                    human_alive = True
+
+        # Game Over logic
+        # If human dies, show game over or restart prompt? 
+        # For now, just let it run until user exits or resets?
+        # Or maybe overlay "GAME OVER"?
+        
+    if not ui_state['is_paused']:
+        # Apply simulation speed like in normal game mode
+        ticks = max(1, int(round(ui_state['simulation_speed'])))
+        for _ in range(ticks):
+            simulation_tick()
+
+    for p in list(config.pipes):
+        p.draw(config.window)
+        
+    for pl in pvc_players:
+        if pl.alive:
+            pl.draw(config.window)
+    
+    # Simple UI for PvC
+    font = pygame.font.Font('font/Pixeltype.ttf', 40)
+    
+    human = next((p for p in pvc_players if p.is_human), None)
+    ai = next((p for p in pvc_players if not p.is_human), None)
+    
+    if human and not human.alive:
+         msg = font.render("GAME OVER - Press ESC", True, (255, 0, 0))
+         config.window.blit(msg, (config.win_width//2 - 100, config.win_height//2))
+    
+    if ai and ai.alive:
+         # Draw AI brain small
+         draw_neural_net(config.window, ai.brain, pygame.Rect(config.win_width - 210, 10, 200, 150))
+         
+    # Labels
+    if human:
+         h_color = (50, 255, 50) 
+         h_label = font.render(f"YOU: {'Alive' if human.alive else 'Dead'}", True, h_color)
+         config.window.blit(h_label, (20, 20))
+         
+    if ai:
+         a_label = font.render(f"AI: {'Alive' if ai.alive else 'Dead'}", True, (255, 255, 255))
+         config.window.blit(a_label, (20, 60))
+    
+    # Render notifications
+    render_notification()
 
 
 def render_game_placeholder(title_font):
@@ -563,21 +743,19 @@ def draw_control_panel(menu_font):
         config.window.blit(surf, rect)
         cursor_y += surf.get_height() + 3
 
-    # Graph box to the right of info box
+    # Graph box - more compact version
     box_gap = max(10, int(config.win_width * 0.01))
-    graph_x = min(pause_rect.left - padding - box_width, info_box.right + box_gap)
-    graph_x = max(panel_rect.left + padding, min(graph_x, panel_rect.right - padding - box_width))
+    graph_width = max(60, int(config.win_width * 0.072))  # Reduced by 40%
+    graph_height = max(36, int(menu_font.get_height() * 1.5))  # Reduced by 40%
+    graph_x = min(pause_rect.left - padding - graph_width, info_box.right + box_gap)
+    graph_x = max(panel_rect.left + padding, min(graph_x, panel_rect.right - padding - graph_width))
     graph_y = box_y
-    graph_box = pygame.Rect(graph_x, graph_y, box_width, box_height)
+    graph_box = pygame.Rect(graph_x, graph_y, graph_width, graph_height)
     pygame.draw.rect(config.window, (30, 30, 30), graph_box, border_radius=6)
     pygame.draw.rect(config.window, white, graph_box, width=1, border_radius=6)
-    graph_font = pygame.font.Font('font/Pixeltype.ttf', max(16, int(menu_font.get_height() * 0.8)))
-    graph_line1 = graph_font.render('Generate', True, white)
-    graph_line2 = graph_font.render('Graph', True, white)
-    total_h = graph_line1.get_height() + graph_line2.get_height() + 2
-    start_y = graph_box.centery - total_h // 2
-    config.window.blit(graph_line1, graph_line1.get_rect(center=(graph_box.centerx, start_y + graph_line1.get_height() // 2)))
-    config.window.blit(graph_line2, graph_line2.get_rect(center=(graph_box.centerx, start_y + graph_line1.get_height() + 2 + graph_line2.get_height() // 2)))
+    graph_font = pygame.font.Font('font/Pixeltype.ttf', max(12, int(menu_font.get_height() * 0.5)))
+    graph_text = graph_font.render('Graph', True, white)
+    config.window.blit(graph_text, graph_text.get_rect(center=graph_box.center))
 
     # Back to menu bottom-right
     back_rect = pygame.Rect(0, 0, max(260, int(config.win_width * 0.24)), max(48, int(menu_font.get_height() * 1.6)))
@@ -599,6 +777,109 @@ def draw_control_panel(menu_font):
     }
 
 
+def render_instructions(menu_font):
+    """Render the instruction panel with controls and features guide"""
+    config.window.fill((20, 20, 30))
+    
+    # Title - Larger
+    title_font = pygame.font.Font('font/Pixeltype.ttf', max(80, int(config.win_height * 0.11)))
+    title = title_font.render('CONTROLS & GUIDE', True, (100, 200, 255))
+    title_rect = title.get_rect(center=(config.win_width // 2, config.win_height * 0.1))
+    config.window.blit(title, title_rect)
+    
+    # Content font - Larger
+    content_font = pygame.font.Font('font/Pixeltype.ttf', max(28, int(config.win_height * 0.038)))
+    header_font = pygame.font.Font('font/Pixeltype.ttf', max(38, int(config.win_height * 0.052)))
+    
+    # Layout
+    left_col_x = config.win_width * 0.15
+    right_col_x = config.win_width * 0.55
+    start_y = config.win_height * 0.22
+    line_spacing = max(38, int(config.win_height * 0.05))
+    section_spacing = max(50, int(config.win_height * 0.062))
+    
+    # Left Column - Simulation Mode
+    y = start_y
+    header = header_font.render('SIMULATION MODE', True, (255, 200, 100))
+    config.window.blit(header, (left_col_x, y))
+    y += section_spacing
+    
+    sim_controls = [
+        ('S', 'Save Champion AI'),
+        ('L', 'Load Saved Champion'),
+        ('ESC', 'Return to Menu'),
+    ]
+    
+    for key, action in sim_controls:
+        key_text = content_font.render(f'{key}:', True, (150, 255, 150))
+        action_text = content_font.render(action, True, (220, 220, 220))
+        config.window.blit(key_text, (left_col_x, y))
+        config.window.blit(action_text, (left_col_x + 80, y))
+        y += line_spacing
+    
+    # Control Panel Features
+    y += section_spacing * 0.5
+    header = header_font.render('CONTROL PANEL', True, (255, 200, 100))
+    config.window.blit(header, (left_col_x, y))
+    y += section_spacing
+    
+    features = [
+        'Speed Slider - Adjust simulation speed',
+        'Jump Slider - Adjust jump force',
+        'Lines Toggle - Show/hide vision',
+        'Graph Button - View performance',
+        'Pause/Resume - Control simulation',
+    ]
+    
+    for feature in features:
+        text = content_font.render(f'- {feature}', True, (220, 220, 220))
+        config.window.blit(text, (left_col_x, y))
+        y += line_spacing
+    
+    # Right Column - Human vs AI Mode
+    y = start_y
+    header = header_font.render('HUMAN vs AI MODE', True, (255, 200, 100))
+    config.window.blit(header, (right_col_x, y))
+    y += section_spacing
+    
+    player_controls = [
+        ('SPACE / ↑', 'Jump (Flap Up)'),
+        ('↓', 'Decelerate (Go Down)'),
+        ('ESC', 'Return to Menu'),
+    ]
+    
+    for key, action in player_controls:
+        key_text = content_font.render(f'{key}:', True, (150, 255, 150))
+        action_text = content_font.render(action, True, (220, 220, 220))
+        config.window.blit(key_text, (right_col_x, y))
+        config.window.blit(action_text, (right_col_x + 140, y))
+        y += line_spacing
+    
+    # Save/Load Info
+    y += section_spacing * 0.5
+    header = header_font.render('SAVE & LOAD', True, (255, 200, 100))
+    config.window.blit(header, (right_col_x, y))
+    y += section_spacing
+    
+    save_info = [
+        '1. Press S to save best AI',
+        '2. File: champion.pkl',
+        '3. Press L to load champion',
+        '4. Auto-loads in PvC mode',
+    ]
+    
+    for info in save_info:
+        text = content_font.render(info, True, (220, 220, 220))
+        config.window.blit(text, (right_col_x, y))
+        y += line_spacing
+    
+    # Bottom hint - Larger
+    hint_font = pygame.font.Font('font/Pixeltype.ttf', max(32, int(config.win_height * 0.042)))
+    hint = hint_font.render('Press ESC to return to Main Menu', True, (150, 150, 255))
+    hint_rect = hint.get_rect(center=(config.win_width // 2, config.win_height * 0.92))
+    config.window.blit(hint, hint_rect)
+
+
 def main():
     state = MENU_MAIN
     load_sounds()
@@ -606,6 +887,7 @@ def main():
     while True:
         title_font, menu_font, author_font = get_fonts()
         events = pygame.event.get()
+        control_rects = {}  # Initialize to prevent UnboundLocalError
 
         if state == MENU_MAIN:
             layout = layout_main_menu(title_font, menu_font, author_font)
@@ -613,6 +895,10 @@ def main():
         elif state == MENU_INSTRUCTIONS:
             buttons = []
             render_instructions(menu_font)
+        elif state == MENU_PVC:
+            buttons = []
+            run_pvc_game_step()
+            control_rects = draw_control_panel(menu_font)
         elif state == MENU_GAME:
             buttons = []
             run_game_step()
@@ -633,6 +919,59 @@ def main():
                                 game_state['pipes_spawn_time'] = 10
                                 game_state['score'] = 0
                                 game_state['high_score'] = 0
+                            elif action == 'pvc':
+                                play_click()
+                                global population_manager, pvc_players
+                                state = MENU_PVC
+                                config.pipes.clear()
+                                game_state['pipes_spawn_time'] = 10
+                                game_state['score'] = 0
+                                # Setup PvC players
+                                import player
+                                import pickle
+                                import os
+                                
+                                pvc_human = player.Player(is_human=True)
+                                pvc_ai = player.Player(is_human=False)
+                                
+                                # Try to load champion first
+                                champion_loaded = False
+                                if os.path.exists('champion.pkl'):
+                                    try:
+                                        with open('champion.pkl', 'rb') as f:
+                                            champion_brain = pickle.load(f)
+                                        pvc_ai.brain = champion_brain.clone()
+                                        champion_loaded = True
+                                        print("Loaded champion AI for PvC mode")
+                                    except Exception as e:
+                                        print(f"Error loading champion: {e}")
+                                
+                                if not champion_loaded:
+                                    # If no champion, create a competent AI with good weights
+                                    print("No champion found, creating competent AI")
+                                    # Manually set good weights for the AI
+                                    # The vision inputs are: [y_diff_to_pipe, x_dist_to_pipe, bottom_pipe_y, top_pipe_y]
+                                    # We want the AI to jump when it's below the gap
+                                    for conn in pvc_ai.brain.connections:
+                                        if conn.enabled:
+                                            # Set weights that make the AI jump when below the pipe gap
+                                            # Input 0 (y_diff) should have strong negative weight to jump when below
+                                            if conn.from_node.id == 0:  # y_diff input
+                                                conn.weight = -3.5
+                                            # Input 1 (x_dist) should have moderate weight
+                                            elif conn.from_node.id == 1:  # x_dist input
+                                                conn.weight = 0.5
+                                            # Input 2 (bottom_pipe_y) should have positive weight
+                                            elif conn.from_node.id == 2:
+                                                conn.weight = 2.0
+                                            # Input 3 (top_pipe_y) should have negative weight
+                                            elif conn.from_node.id == 3:
+                                                conn.weight = -2.0
+                                            # Bias should be slightly negative to avoid excessive jumping
+                                            elif conn.from_node.id == pvc_ai.brain.bias_index:
+                                                conn.weight = -1.5
+                
+                                pvc_players = [pvc_human, pvc_ai]
                             elif action == 'instructions':
                                 play_click()
                                 state = MENU_INSTRUCTIONS
@@ -645,48 +984,149 @@ def main():
                                 play_click()
                                 pygame.quit()
                                 exit()
-            elif state == MENU_INSTRUCTIONS:
+                                pygame.quit()
+                                exit()
+            
+            # Global Key shortcuts (Save/Load)
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_s:
+                    population_manager.save_champion()
+                    # Show confirmation toast? For now print to console
+                if event.key == pygame.K_l:
+                    population_manager.load_champion()
+                    restart_simulation()
+
+            if state == MENU_INSTRUCTIONS:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = MENU_MAIN
                     set_music('menu')
-            elif state == MENU_GAME:
+            if state == MENU_PVC:
+                # Control panel interactions
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    if control_rects['slider_track'].collidepoint(event.pos) or control_rects['slider_knob'].collidepoint(event.pos):
+                    if 'slider_track' in control_rects and (control_rects['slider_track'].collidepoint(event.pos) or control_rects['slider_knob'].collidepoint(event.pos)):
                         ui_state['slider_dragging'] = True
                         update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
-                    elif control_rects['jump_track'].collidepoint(event.pos) or control_rects['jump_knob'].collidepoint(event.pos):
+                    elif 'jump_track' in control_rects and (control_rects['jump_track'].collidepoint(event.pos) or control_rects['jump_knob'].collidepoint(event.pos)):
                         ui_state['jump_dragging'] = True
                         update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
-                    elif control_rects['lines_toggle'].collidepoint(event.pos):
+                    elif 'lines_toggle' in control_rects and control_rects['lines_toggle'].collidepoint(event.pos):
                         play_click()
                         config.show_lines = not config.show_lines
-                    elif control_rects['graph'].collidepoint(event.pos):
-                        play_click()
-                        graph_state['dirty'] = True
-                        show_graph_window()
-                    elif control_rects['pause'].collidepoint(event.pos):
+                    elif 'pause' in control_rects and control_rects['pause'].collidepoint(event.pos):
                         play_click()
                         ui_state['is_paused'] = not ui_state['is_paused']
-                    elif control_rects['restart'].collidepoint(event.pos):
+                    elif 'restart' in control_rects and control_rects['restart'].collidepoint(event.pos):
                         play_click()
-                        restart_simulation()
-                    elif control_rects['back'].collidepoint(event.pos):
+                        # Restart PvC game
+                        config.pipes.clear()
+                        game_state['pipes_spawn_time'] = 10
+                        game_state['score'] = 0
+                        for p in pvc_players:
+                            p.alive = True
+                            p.rect.centery = config.win_height // 2
+                            p.vel = 0
+                    elif 'back' in control_rects and control_rects['back'].collidepoint(event.pos):
                         play_click()
                         state = MENU_MAIN
                         set_music('menu')
                 if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                     ui_state['slider_dragging'] = False
                     ui_state['jump_dragging'] = False
-                if event.type == pygame.MOUSEMOTION and ui_state['slider_dragging']:
+                if event.type == pygame.MOUSEMOTION and ui_state['slider_dragging'] and 'slider_track' in control_rects:
                     update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
-                if event.type == pygame.MOUSEMOTION and ui_state['jump_dragging']:
+                if event.type == pygame.MOUSEMOTION and ui_state['jump_dragging'] and 'jump_track' in control_rects:
                     update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    state = MENU_MAIN
-                    set_music('menu')
+                # Player controls
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        state = MENU_MAIN
+                        set_music('menu')
+                    elif event.key == pygame.K_l:
+                        # Load champion for AI player
+                        try:
+                            import pickle
+                            import os
+                            filename = 'champion.pkl'
+                            if os.path.exists(filename):
+                                with open(filename, 'rb') as f:
+                                    champion_brain = pickle.load(f)
+                                show_notification('Champion AI Loaded for PvC!')
+                                # Update AI player with loaded champion
+                                for p in pvc_players:
+                                    if not p.is_human:
+                                        p.brain = champion_brain.clone()
+                                        # Reset AI player state
+                                        p.alive = True
+                                        p.rect.centery = config.win_height // 2
+                                        p.vel = 0
+                                        p.fitness = 0
+                                        p.lifespan = 0
+                                print(f"Loaded champion brain for PvC mode")
+                            else:
+                                show_notification('No champion.pkl found!')
+                                print(f"Champion file not found: {filename}")
+                        except Exception as e:
+                            show_notification(f'Error loading champion!')
+                            print(f"Error loading champion: {e}")
+                    else:
+                        for p in pvc_players:
+                            if p.is_human:
+                                p.handle_event(event)
+
+            elif state == MENU_GAME:
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if 'slider_track' in control_rects and (control_rects['slider_track'].collidepoint(event.pos) or control_rects['slider_knob'].collidepoint(event.pos)):
+                        ui_state['slider_dragging'] = True
+                        update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
+                    elif 'jump_track' in control_rects and (control_rects['jump_track'].collidepoint(event.pos) or control_rects['jump_knob'].collidepoint(event.pos)):
+                        ui_state['jump_dragging'] = True
+                        update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
+                    elif 'lines_toggle' in control_rects and control_rects['lines_toggle'].collidepoint(event.pos):
+                        play_click()
+                        config.show_lines = not config.show_lines
+                    elif 'graph' in control_rects and control_rects['graph'].collidepoint(event.pos):
+                        play_click()
+                        graph_state['dirty'] = True
+                        show_graph_window()
+                    elif 'pause' in control_rects and control_rects['pause'].collidepoint(event.pos):
+                        play_click()
+                        ui_state['is_paused'] = not ui_state['is_paused']
+                    elif 'restart' in control_rects and control_rects['restart'].collidepoint(event.pos):
+                        play_click()
+                        restart_simulation()
+                    elif 'back' in control_rects and control_rects['back'].collidepoint(event.pos):
+                        play_click()
+                        state = MENU_MAIN
+                        set_music('menu')
+                if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                    ui_state['slider_dragging'] = False
+                    ui_state['jump_dragging'] = False
+                if event.type == pygame.MOUSEMOTION and ui_state['slider_dragging'] and 'slider_track' in control_rects:
+                    update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
+                if event.type == pygame.MOUSEMOTION and ui_state['jump_dragging'] and 'jump_track' in control_rects:
+                    update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        state = MENU_MAIN
+                        set_music('menu')
+                    elif event.key == pygame.K_s:
+                        if population_manager.save_champion():
+                            show_notification('Champion AI Saved!')
+                    elif event.key == pygame.K_l:
+                        if population_manager.load_champion():
+                            show_notification('Champion AI Loaded!')
+                            restart_simulation()
 
         pygame.display.flip()
         clock.tick(60)
 
 
-main()
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        with open('error_log.txt', 'w', encoding='utf-8') as f:
+            f.write(traceback.format_exc())
+            print(traceback.format_exc())
+        pygame.quit()
