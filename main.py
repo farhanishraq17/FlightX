@@ -1,6 +1,7 @@
 import os
 import pygame
 from sys import exit
+import threading
 import config
 import components
 import population
@@ -26,7 +27,9 @@ background_bottom = pygame.image.load('Assets/dark1.jpg').convert()
 main_menu_bg = pygame.image.load('Assets/mainmenu.png').convert_alpha()
 
 population_manager = population.Population(100)
-game_state = {'pipes_spawn_time': 10, 'score': 0, 'high_score': 0}
+game_state = {'pipes_spawn_time': 10, 'score': 0, 'high_score': 0,
+              'wind_zones': [], 'coins': [], 'flying_blocks': [],
+              'falling_obstacles': [], 'obstacle_counter': 0}
 graph_state = {'data': [], 'last_logged_gen': None, 'dirty': False}
 ui_state = {
     'simulation_speed': 0.0,
@@ -52,6 +55,36 @@ MENU_MAIN = 'main'
 MENU_INSTRUCTIONS = 'instructions'
 MENU_GAME = 'game'
 MENU_PVC = 'pvc'
+MENU_SIM_CLONE = 'sim_clone'
+MENU_DQN_TRAIN = 'dqn_train'
+MENU_DQN_PLAY = 'dqn_play'
+
+# Behavioral Cloning state
+bc_recorder = None
+
+# Simulate Clone state
+ALGO_COLORS = {
+    'NEAT':  (0, 255, 100),     # green
+    'BC':    (100, 150, 255),    # blue
+    'DQN':   (255, 160, 50),     # orange
+}
+sim_clone_state = {
+    'players': [],           # list of Player objects
+    'algo_map': {},          # player_id -> algo_name
+    'planes_per_algo': 1,    # how many of each algorithm
+    'round': 0,
+    'history': {'NEAT': [], 'BC': [], 'DQN': []},  # scores per round
+    'best_scores': {'NEAT': 0, 'BC': 0, 'DQN': 0},
+}
+
+# DQN state
+dqn_play_players = []
+dqn_training_state = {
+    'running': False,
+    'progress': '',
+    'done': False,
+    'result': None,
+}
 
 
 def get_fonts():
@@ -81,7 +114,41 @@ def play_click():
 
 
 def generate_pipes():
-    config.pipes.append(components.Pipes(config.win_width))
+    score = game_state['score']
+    game_state['obstacle_counter'] += 1
+    counter = game_state['obstacle_counter']
+
+    # ── Pipe type selection (score-gated) ──
+    if score >= 30 and counter % 3 == 0:
+        pipe = components.MultiHolePipes(config.win_width)
+        config.pipes.append(pipe)
+    elif counter % 4 == 0:
+        pipe = components.MovingPipes(config.win_width)
+        config.pipes.append(pipe)
+    else:
+        pipe = components.Pipes(config.win_width)
+        config.pipes.append(pipe)
+
+    # ── Compute gap center of the pipe just spawned ──
+    gap_y = None
+    if hasattr(pipe, 'top_rect') and hasattr(pipe, 'bottom_rect'):
+        gap_y = int((pipe.top_height + (components.Ground.ground_level - pipe.bottom_height)) / 2)
+
+    # ── Wind zones: after 50 pts ──
+    if score >= 50 and counter % 4 == 0:
+        game_state['wind_zones'].append(components.WindZone(config.win_width))
+
+    # ── Flying blocks: after 20 pts ──
+    if score >= 20 and counter % 3 == 0:
+        game_state['flying_blocks'].append(components.FlyingBlock(config.win_width))
+
+    # ── Falling obstacles: after 15 pts ──
+    if score >= 15 and counter % 3 == 0:
+        game_state['falling_obstacles'].append(components.FallingObstacle(config.win_width))
+
+    # ── Coins: placed between pipes at gap center ──
+    if counter % 3 == 0:
+        game_state['coins'].append(components.Coin(config.win_width, gap_y))
 
 
 def draw_background():
@@ -106,6 +173,11 @@ def restart_simulation():
     game_state['pipes_spawn_time'] = 10
     game_state['score'] = 0
     game_state['high_score'] = 0
+    game_state['wind_zones'] = []
+    game_state['coins'] = []
+    game_state['flying_blocks'] = []
+    game_state['falling_obstacles'] = []
+    game_state['obstacle_counter'] = 0
     ui_state['is_paused'] = False
     graph_state['data'].clear()
     graph_state['last_logged_gen'] = None
@@ -169,29 +241,57 @@ def set_music(track):
 def layout_main_menu(title_font, menu_font, author_font):
     min_side = min(config.win_width, config.win_height)
     padding = max(10, int(min_side * 0.02))
-    gap = max(10, int(min_side * 0.015))
+    gap = max(10, int(min_side * 0.012))
 
     title_surf = title_font.render('FlightX', True, (255, 255, 255))
-    start_surf = menu_font.render('Start Simulation', True, (0, 0, 0))
+    start_surf = menu_font.render('Start Simulation (NEAT)', True, (0, 0, 0))
     pvc_surf = menu_font.render('Human vs AI', True, (0, 0, 0))
-    instruction_surf = menu_font.render('Instruction Manual', True, (0, 0, 0))
+    train_clone_surf = menu_font.render('Train Clone (BC)', True, (0, 0, 0))
+    play_clone_surf = menu_font.render('Simulate Clone', True, (0, 0, 0))
+    train_dqn_surf = menu_font.render('Train DQN Agent', True, (0, 0, 0))
+    play_dqn_surf = menu_font.render('Play vs DQN', True, (0, 0, 0))
+    instruction_surf = menu_font.render('Instructions', True, (0, 0, 0))
     mute_surf = menu_font.render(f'Audio: {"Off" if config.mute else "On"}', True, (0, 0, 0))
     exit_surf = menu_font.render('Exit', True, (0, 0, 0))
     author_surf = author_font.render('Author : Farhan Ishraq', True, (255, 255, 255))
 
-    title_rect = title_surf.get_rect(center=(config.win_width // 2, int(config.win_height * 0.28)))
+    title_rect = title_surf.get_rect(center=(config.win_width // 2, int(config.win_height * 0.15)))
 
-    option_surfaces = [start_surf, pvc_surf, instruction_surf, mute_surf, exit_surf]
-    option_actions = ['start', 'pvc', 'instructions', 'audio', 'exit']
-
-    btn_height = max(s.get_height() + padding * 2 for s in option_surfaces)
-    total_height = btn_height * len(option_surfaces) + gap * (len(option_surfaces) - 1)
-    offset_down = max(10, int(min_side * 0.12))
-    column_top = config.win_height // 2 - total_height // 2 + offset_down
-    option_centers = [
-        (config.win_width // 2, column_top + btn_height // 2 + i * (btn_height + gap))
-        for i in range(len(option_surfaces))
+    # Left column: core modes     Right column: ML modes
+    left_options = [
+        (start_surf, 'start'),
+        (pvc_surf, 'pvc'),
+        (instruction_surf, 'instructions'),
+        (mute_surf, 'audio'),
+        (exit_surf, 'exit'),
     ]
+    right_options = [
+        (train_clone_surf, 'train_clone'),
+        (play_clone_surf, 'sim_clone'),
+        (train_dqn_surf, 'train_dqn'),
+        (play_dqn_surf, 'play_dqn'),
+    ]
+
+    # Combine into a single list for unified layout (two columns)
+    all_option_surfaces = [s for s, _ in left_options] + [s for s, _ in right_options]
+    btn_height = max(s.get_height() + padding * 2 for s in all_option_surfaces)
+
+    col_width = max(260, int(config.win_width * 0.35))
+    left_cx = config.win_width // 2 - col_width // 2
+    right_cx = config.win_width // 2 + col_width // 2
+
+    offset_down = max(10, int(min_side * 0.06))
+    max_rows = max(len(left_options), len(right_options))
+    total_height = btn_height * max_rows + gap * (max_rows - 1)
+    column_top = config.win_height // 2 - total_height // 2 + offset_down
+
+    combined = []
+    for i, (surf, action) in enumerate(left_options):
+        cy = column_top + btn_height // 2 + i * (btn_height + gap)
+        combined.append((surf, (left_cx, cy), action))
+    for i, (surf, action) in enumerate(right_options):
+        cy = column_top + btn_height // 2 + i * (btn_height + gap)
+        combined.append((surf, (right_cx, cy), action))
 
     author_rect = author_surf.get_rect(midbottom=(config.win_width // 2, config.win_height - gap))
 
@@ -207,7 +307,7 @@ def layout_main_menu(title_font, menu_font, author_font):
     return {
         'padding': padding,
         'title': (title_surf, title_rect),
-        'options': list(zip(option_surfaces, option_centers, option_actions)),
+        'options': combined,
         'author': (author_surf, author_rect),
         'fs': (fs_box, fs_box_rect, fs_button_surf, fs_text_rect),
     }
@@ -246,6 +346,9 @@ def draw_main_menu(layout):
 
     author_surf, author_rect = layout['author']
     config.window.blit(author_surf, author_rect)
+
+    # Render notifications on main menu too
+    render_notification()
     return buttons
 
 
@@ -397,6 +500,63 @@ def show_graph_window():
     render_graph(save_path='score_graph.png', show_window=True, force=True)
 
 
+def update_obstacles_tick(players_to_affect):
+    """Update wind zones, coins, and flying blocks. Apply effects to given players."""
+    # Update wind zones
+    for wz in list(game_state['wind_zones']):
+        wz.update()
+        if wz.off_screen:
+            game_state['wind_zones'].remove(wz)
+            continue
+        for pl in players_to_affect:
+            if pl.alive:
+                wz.apply_force(pl)
+
+    # Update coins
+    for coin in list(game_state['coins']):
+        coin.update()
+        if coin.off_screen:
+            game_state['coins'].remove(coin)
+            continue
+        for pl in players_to_affect:
+            if pl.alive and coin.check_collect(pl.rect):
+                game_state['score'] += coin.BONUS
+                if game_state['score'] > game_state.get('high_score', 0):
+                    game_state['high_score'] = game_state['score']
+
+    # Update flying blocks
+    for fb in list(game_state['flying_blocks']):
+        fb.update()
+        if fb.off_screen:
+            game_state['flying_blocks'].remove(fb)
+            continue
+        for pl in players_to_affect:
+            if pl.alive and fb.check_collision(pl.rect):
+                pl.alive = False
+
+    # Update falling obstacles
+    for fo in list(game_state['falling_obstacles']):
+        fo.update()
+        if fo.off_screen:
+            game_state['falling_obstacles'].remove(fo)
+            continue
+        for pl in players_to_affect:
+            if pl.alive and fo.check_collision(pl.rect):
+                pl.alive = False
+
+
+def draw_obstacles(window):
+    """Draw wind zones, coins, flying blocks, and falling obstacles."""
+    for wz in game_state['wind_zones']:
+        wz.draw(window)
+    for coin in game_state['coins']:
+        coin.draw(window)
+    for fb in game_state['flying_blocks']:
+        fb.draw(window)
+    for fo in game_state['falling_obstacles']:
+        fo.draw(window)
+
+
 def run_game_step():
     draw_background()
 
@@ -428,8 +588,15 @@ def run_game_step():
             population_manager.update_live_players()
         else:
             config.pipes.clear()
+            game_state['wind_zones'] = []
+            game_state['coins'] = []
+            game_state['flying_blocks'] = []
+            game_state['falling_obstacles'] = []
+            game_state['obstacle_counter'] = 0
             population_manager.natural_selection()
             game_state['score'] = 0
+
+        update_obstacles_tick(population_manager.players)
 
     if not ui_state['is_paused']:
         ticks = max(1, int(round(ui_state['simulation_speed'])))
@@ -438,6 +605,7 @@ def run_game_step():
 
     for p in list(config.pipes):
         p.draw(config.window)
+    draw_obstacles(config.window)
     for pl in population_manager.players:
         if pl.alive:
             pl.draw(config.window)
@@ -450,6 +618,304 @@ def run_game_step():
     
     # Render notifications
     render_notification()
+
+
+
+def _init_sim_clone_players():
+    """Create one set of algorithm players for the simulation."""
+    import player as player_mod
+    import pickle, os
+    players = []
+    algo_map = {}
+    n = sim_clone_state['planes_per_algo']
+
+    # NEAT players (from champion.pkl)
+    for i in range(n):
+        try:
+            with open('champion.pkl', 'rb') as f:
+                brain = pickle.load(f)
+            p = player_mod.Player(is_human=False)
+            p.brain = brain
+            p.color_tint = ALGO_COLORS['NEAT']
+            players.append(p)
+            algo_map[id(p)] = 'NEAT'
+        except:
+            pass
+
+    # BC players
+    for i in range(n):
+        try:
+            p = player_mod.BCPlayer()
+            if p.load_model():
+                p.color_tint = ALGO_COLORS['BC']
+                players.append(p)
+                algo_map[id(p)] = 'BC'
+        except:
+            pass
+
+    # DQN players
+    for i in range(n):
+        try:
+            p = player_mod.DQNPlayer()
+            if p.load_model():
+                p.color_tint = ALGO_COLORS['DQN']
+                players.append(p)
+                algo_map[id(p)] = 'DQN'
+        except:
+            pass
+
+    return players, algo_map
+
+
+def _draw_sim_clone_panel(window, font):
+    """Draw bottom control panel with algorithm legend, plane count, and live graph."""
+    panel_h = 180
+    panel_y = config.win_height - panel_h
+    # Semi-transparent background
+    panel_surf = pygame.Surface((config.win_width, panel_h), pygame.SRCALPHA)
+    panel_surf.fill((10, 10, 20, 210))
+    window.blit(panel_surf, (0, panel_y))
+
+    # Divider line
+    pygame.draw.line(window, (80, 80, 120), (0, panel_y), (config.win_width, panel_y), 2)
+
+    small_font = pygame.font.Font('font/Pixeltype.ttf', 22)
+    y = panel_y + 8
+
+    # ─── Left: Legend + controls ───
+    lbl = font.render('ALGORITHM LEGEND', True, (220, 220, 255))
+    window.blit(lbl, (15, y))
+    y += 28
+    for algo, color in ALGO_COLORS.items():
+        pygame.draw.circle(window, color, (28, y + 8), 7)
+        alive = sum(1 for p in sim_clone_state['players']
+                    if sim_clone_state['algo_map'].get(id(p)) == algo and p.alive)
+        total = sum(1 for p in sim_clone_state['players']
+                    if sim_clone_state['algo_map'].get(id(p)) == algo)
+        best = sim_clone_state['best_scores'].get(algo, 0)
+        txt = small_font.render(f'{algo}: {alive}/{total} alive  Best={best}', True, color)
+        window.blit(txt, (42, y))
+        y += 22
+
+    # Plane count controls
+    y += 5
+    n = sim_clone_state['planes_per_algo']
+    ctrl = small_font.render(f'Planes per algo: {n}   [-] [+]', True, (200, 200, 200))
+    window.blit(ctrl, (15, y))
+    # Store button rects for click detection
+    sim_clone_state['_minus_rect'] = pygame.Rect(15 + ctrl.get_width() - 75, y, 25, 20)
+    sim_clone_state['_plus_rect'] = pygame.Rect(15 + ctrl.get_width() - 40, y, 25, 20)
+    y += 22
+    round_lbl = small_font.render(f'Round: {sim_clone_state["round"]}   Score: {game_state["score"]}', True, (180, 180, 180))
+    window.blit(round_lbl, (15, y))
+
+    # ─── Right: Live performance graph ───
+    graph_x = max(220, config.win_width // 2 - 20)
+    graph_y = panel_y + 12
+    graph_w = config.win_width - graph_x - 15
+    graph_h = panel_h - 24
+
+    # Graph background
+    pygame.draw.rect(window, (20, 20, 35), (graph_x, graph_y, graph_w, graph_h))
+    pygame.draw.rect(window, (60, 60, 90), (graph_x, graph_y, graph_w, graph_h), 1)
+
+    # Title
+    g_title = small_font.render('Score per Round', True, (180, 180, 220))
+    window.blit(g_title, (graph_x + 5, graph_y + 2))
+
+    # Plot lines for each algorithm
+    history = sim_clone_state['history']
+    all_scores = [s for v in history.values() for s in v]
+    max_score = max(all_scores) if all_scores else 1
+    max_rounds = max(len(v) for v in history.values()) if any(history.values()) else 1
+
+    plot_x = graph_x + 5
+    plot_y = graph_y + 20
+    plot_w = graph_w - 10
+    plot_h = graph_h - 28
+
+    # Grid lines
+    for gi in range(5):
+        gy = plot_y + int(plot_h * gi / 4)
+        pygame.draw.line(window, (40, 40, 60), (plot_x, gy), (plot_x + plot_w, gy), 1)
+
+    for algo, color in ALGO_COLORS.items():
+        scores = history.get(algo, [])
+        if len(scores) < 2:
+            continue
+        points = []
+        for i, s in enumerate(scores[-30:]):  # Show last 30 rounds
+            px = plot_x + int(plot_w * i / min(29, len(scores) - 1))
+            py = plot_y + plot_h - int(plot_h * min(s, max_score) / max(max_score, 1))
+            points.append((px, py))
+        if len(points) >= 2:
+            pygame.draw.lines(window, color, False, points, 2)
+        # Dot at latest point
+        if points:
+            pygame.draw.circle(window, color, points[-1], 4)
+
+
+def run_simulate_clone_step():
+    """Game step for the Simulate Clone mode — multiple AI planes compared."""
+    draw_background()
+    config.ground.draw(config.window)
+
+    all_players = sim_clone_state['players']
+
+    def simulation_tick():
+        if game_state['pipes_spawn_time'] <= 0:
+            generate_pipes()
+            game_state['pipes_spawn_time'] = 200
+        game_state['pipes_spawn_time'] -= 1
+
+        for p in list(config.pipes):
+            p.update()
+            if p.passed and not p.counted:
+                game_state['score'] += 1
+                p.counted = True
+            if p.off_screen:
+                config.pipes.remove(p)
+
+        for p in all_players:
+            if p.alive:
+                p.look()
+                p.think(generation=100)
+                p.update(config.ground)
+
+        update_obstacles_tick(all_players)
+
+        # Check if all dead → auto-restart
+        if all(not p.alive for p in all_players) and len(all_players) > 0:
+            # Record scores per algo
+            for algo in ALGO_COLORS:
+                sim_clone_state['history'][algo].append(game_state['score'])
+                if game_state['score'] > sim_clone_state['best_scores'].get(algo, 0):
+                    # Check if any of this algo's planes were the last alive
+                    sim_clone_state['best_scores'][algo] = max(
+                        sim_clone_state['best_scores'].get(algo, 0),
+                        game_state['score']
+                    )
+            sim_clone_state['round'] += 1
+
+            # Reset
+            config.pipes.clear()
+            game_state['wind_zones'] = []
+            game_state['coins'] = []
+            game_state['flying_blocks'] = []
+            game_state['falling_obstacles'] = []
+            game_state['obstacle_counter'] = 0
+            game_state['pipes_spawn_time'] = 10
+            game_state['score'] = 0
+            new_players, new_map = _init_sim_clone_players()
+            sim_clone_state['players'] = new_players
+            sim_clone_state['algo_map'] = new_map
+
+    if not ui_state['is_paused']:
+        ticks = max(1, int(round(ui_state['simulation_speed'])))
+        for _ in range(ticks):
+            simulation_tick()
+
+    for p in list(config.pipes):
+        p.draw(config.window)
+    draw_obstacles(config.window)
+
+    # Draw players with colored glow rings
+    for pl in all_players:
+        if pl.alive:
+            pl.draw(config.window)
+            # Draw colored ring around each plane
+            algo = sim_clone_state['algo_map'].get(id(pl), 'NEAT')
+            color = ALGO_COLORS.get(algo, (255, 255, 255))
+            cx = pl.rect.centerx
+            cy = pl.rect.centery
+            pygame.draw.circle(config.window, color, (cx, cy), 14, 2)
+
+    # Score display
+    font = pygame.font.Font('font/Pixeltype.ttf', 36)
+    score_txt = font.render(f'Score: {game_state["score"]}', True, (255, 255, 255))
+    config.window.blit(score_txt, (config.win_width // 2 - 50, 15))
+
+    # Bottom panel
+    _draw_sim_clone_panel(config.window, font)
+
+    render_notification()
+
+
+def run_dqn_play_step():
+    """Game step for playing against the DQN AI."""
+    draw_background()
+    config.ground.draw(config.window)
+
+    def simulation_tick():
+        if game_state['pipes_spawn_time'] <= 0:
+            generate_pipes()
+            game_state['pipes_spawn_time'] = 200
+        game_state['pipes_spawn_time'] -= 1
+
+        for p in list(config.pipes):
+            p.update()
+            if p.passed and not p.counted:
+                game_state['score'] += 1
+                p.counted = True
+            if p.off_screen:
+                config.pipes.remove(p)
+
+        for p in dqn_play_players:
+            if p.alive:
+                p.look()
+                p.think(generation=100 if not p.is_human else 1)
+                p.update(config.ground)
+
+        update_obstacles_tick(dqn_play_players)
+
+    if not ui_state['is_paused']:
+        ticks = max(1, int(round(ui_state['simulation_speed'])))
+        for _ in range(ticks):
+            simulation_tick()
+
+    for p in list(config.pipes):
+        p.draw(config.window)
+    draw_obstacles(config.window)
+
+    for pl in dqn_play_players:
+        if pl.alive:
+            pl.draw(config.window)
+
+    font = pygame.font.Font('font/Pixeltype.ttf', 40)
+    human = next((p for p in dqn_play_players if p.is_human), None)
+    dqn_ai = next((p for p in dqn_play_players if not p.is_human), None)
+
+    if human and not human.alive:
+        msg = font.render("GAME OVER - Press ESC", True, (255, 0, 0))
+        config.window.blit(msg, (config.win_width // 2 - 100, config.win_height // 2))
+
+    if human:
+        h_label = font.render(f"YOU: {'Alive' if human.alive else 'Dead'}", True, (50, 255, 50))
+        config.window.blit(h_label, (20, 20))
+    if dqn_ai:
+        a_label = font.render(f"DQN AI: {'Alive' if dqn_ai.alive else 'Dead'}", True, (255, 180, 80))
+        config.window.blit(a_label, (20, 60))
+
+    render_notification()
+
+
+def render_dqn_training_screen(menu_font):
+    """Show DQN training progress screen."""
+    config.window.fill((20, 20, 30))
+    title_font = pygame.font.Font('font/Pixeltype.ttf', max(60, int(config.win_height * 0.09)))
+    title = title_font.render('DQN TRAINING IN PROGRESS', True, (255, 200, 100))
+    title_rect = title.get_rect(center=(config.win_width // 2, config.win_height * 0.3))
+    config.window.blit(title, title_rect)
+
+    progress_text = dqn_training_state.get('progress', 'Starting...')
+    prog_font = pygame.font.Font('font/Pixeltype.ttf', max(32, int(config.win_height * 0.045)))
+    prog_surf = prog_font.render(progress_text, True, (220, 220, 220))
+    prog_rect = prog_surf.get_rect(center=(config.win_width // 2, config.win_height * 0.5))
+    config.window.blit(prog_surf, prog_rect)
+
+    hint = prog_font.render('Press ESC to cancel', True, (150, 150, 255))
+    hint_rect = hint.get_rect(center=(config.win_width // 2, config.win_height * 0.7))
+    config.window.blit(hint, hint_rect)
 
 
 def run_pvc_game_step():
@@ -476,26 +942,22 @@ def run_pvc_game_step():
         for p in pvc_players:
             if p.alive:
                 p.look()
-                # Use high generation number for AI to eliminate random failures
                 p.think(generation=100 if not p.is_human else 1)
                 p.update(config.ground)
                 if p.is_human:
                     human_alive = True
 
-        # Game Over logic
-        # If human dies, show game over or restart prompt? 
-        # For now, just let it run until user exits or resets?
-        # Or maybe overlay "GAME OVER"?
-        
+        update_obstacles_tick(pvc_players)
+
     if not ui_state['is_paused']:
-        # Apply simulation speed like in normal game mode
         ticks = max(1, int(round(ui_state['simulation_speed'])))
         for _ in range(ticks):
             simulation_tick()
 
     for p in list(config.pipes):
         p.draw(config.window)
-        
+    draw_obstacles(config.window)
+
     for pl in pvc_players:
         if pl.alive:
             pl.draw(config.window)
@@ -877,6 +1339,7 @@ def render_instructions(menu_font):
 
 
 def main():
+    global bc_recorder, dqn_play_players
     state = MENU_MAIN
     load_sounds()
     set_music('menu')
@@ -895,6 +1358,23 @@ def main():
             buttons = []
             run_pvc_game_step()
             control_rects = draw_control_panel(menu_font)
+        elif state == MENU_SIM_CLONE:
+            buttons = []
+            run_simulate_clone_step()
+            control_rects = draw_control_panel(menu_font)
+        elif state == MENU_DQN_PLAY:
+            buttons = []
+            run_dqn_play_step()
+            control_rects = draw_control_panel(menu_font)
+        elif state == MENU_DQN_TRAIN:
+            buttons = []
+            render_dqn_training_screen(menu_font)
+            # Check if training finished
+            if dqn_training_state['done']:
+                dqn_training_state['done'] = False
+                dqn_training_state['running'] = False
+                show_notification('DQN Training Complete!')
+                state = MENU_MAIN
         elif state == MENU_GAME:
             buttons = []
             run_game_step()
@@ -923,13 +1403,12 @@ def main():
                                 game_state['pipes_spawn_time'] = 10
                                 game_state['score'] = 0
                                 # Setup PvC players
-                                import player
+                                import player as player_mod
                                 import pickle
-                                import os
-                                
-                                pvc_human = player.Player(is_human=True)
-                                pvc_ai = player.Player(is_human=False)
-                                
+
+                                pvc_human = player_mod.Player(is_human=True)
+                                pvc_ai = player_mod.Player(is_human=False)
+
                                 # Try to load champion first
                                 champion_loaded = False
                                 if os.path.exists('champion.pkl'):
@@ -941,33 +1420,116 @@ def main():
                                         print("Loaded champion AI for PvC mode")
                                     except Exception as e:
                                         print(f"Error loading champion: {e}")
-                                
+
                                 if not champion_loaded:
-                                    # If no champion, create a competent AI with good weights
                                     print("No champion found, creating competent AI")
-                                    # Manually set good weights for the AI
-                                    # The vision inputs are: [y_diff_to_pipe, x_dist_to_pipe, bottom_pipe_y, top_pipe_y]
-                                    # We want the AI to jump when it's below the gap
                                     for conn in pvc_ai.brain.connections:
-                                        if conn.enabled:
-                                            # Set weights that make the AI jump when below the pipe gap
-                                            # Input 0 (y_diff) should have strong negative weight to jump when below
-                                            if conn.from_node.id == 0:  # y_diff input
-                                                conn.weight = -3.5
-                                            # Input 1 (x_dist) should have moderate weight
-                                            elif conn.from_node.id == 1:  # x_dist input
-                                                conn.weight = 0.5
-                                            # Input 2 (bottom_pipe_y) should have positive weight
-                                            elif conn.from_node.id == 2:
-                                                conn.weight = 2.0
-                                            # Input 3 (top_pipe_y) should have negative weight
-                                            elif conn.from_node.id == 3:
-                                                conn.weight = -2.0
-                                            # Bias should be slightly negative to avoid excessive jumping
-                                            elif conn.from_node.id == pvc_ai.brain.bias_index:
-                                                conn.weight = -1.5
-                
+                                        if hasattr(conn, 'enabled') and not conn.enabled:
+                                            continue
+                                        if conn.from_node.id == 0:
+                                            conn.weight = -3.5
+                                        elif conn.from_node.id == 1:
+                                            conn.weight = 0.5
+                                        elif conn.from_node.id == 2:
+                                            conn.weight = 2.0
+                                        elif conn.from_node.id == 3:
+                                            conn.weight = -2.0
+                                        elif conn.from_node.id == pvc_ai.brain.bias_index:
+                                            conn.weight = -1.5
+
                                 pvc_players = [pvc_human, pvc_ai]
+
+                                # Initialize recorder for PvC
+                                from behavioral_cloning import DataRecorder
+                                bc_recorder = DataRecorder()
+
+                            elif action == 'train_clone':
+                                play_click()
+                                print('[MENU] Train Clone clicked')
+                                from behavioral_cloning import BCTrainer
+                                trainer = BCTrainer()
+                                acc, n = trainer.train()
+                                if acc is not None:
+                                    show_notification(f'Clone trained! Acc={acc:.1f}% ({n} samples)')
+                                    print(f'[BC] Training done: acc={acc:.1f}%')
+                                else:
+                                    show_notification('No data! Record in Human vs AI first (R key)')
+                                    print('[BC] No training data found')
+
+                            elif action == 'sim_clone':
+                                play_click()
+                                print('[MENU] Simulate Clone clicked')
+                                players, algo_map = _init_sim_clone_players()
+                                if players:
+                                    sim_clone_state['players'] = players
+                                    sim_clone_state['algo_map'] = algo_map
+                                    sim_clone_state['round'] = 0
+                                    sim_clone_state['history'] = {'NEAT': [], 'BC': [], 'DQN': []}
+                                    sim_clone_state['best_scores'] = {'NEAT': 0, 'BC': 0, 'DQN': 0}
+                                    state = MENU_SIM_CLONE
+                                    config.pipes.clear()
+                                    game_state['pipes_spawn_time'] = 10
+                                    game_state['score'] = 0
+                                    game_state['wind_zones'] = []
+                                    game_state['coins'] = []
+                                    game_state['flying_blocks'] = []
+                                    game_state['falling_obstacles'] = []
+                                    game_state['obstacle_counter'] = 0
+                                    print(f'[SIM] Starting with {len(players)} planes')
+                                else:
+                                    show_notification('No trained models! Train BC or DQN first.')
+
+                            elif action == 'train_dqn':
+                                play_click()
+                                if not dqn_training_state['running']:
+                                    dqn_training_state['running'] = True
+                                    dqn_training_state['done'] = False
+                                    dqn_training_state['progress'] = 'Starting...'
+                                    state = MENU_DQN_TRAIN
+
+                                    def _train_dqn_thread():
+                                        try:
+                                            from dqn_agent import DQNAgent
+                                            agent = DQNAgent()
+
+                                            def _progress(ep, total, reward, score, eps):
+                                                dqn_training_state['progress'] = (
+                                                    f'Episode {ep}/{total}  Reward={reward:.0f}  '
+                                                    f'Score={score}  eps={eps:.3f}'
+                                                )
+
+                                            agent.train(
+                                                num_episodes=300,
+                                                max_steps=3000,
+                                                progress_callback=_progress,
+                                            )
+                                            dqn_training_state['result'] = agent.training_log
+                                        except Exception as e:
+                                            print(f'[DQN] Training error: {e}')
+                                            dqn_training_state['progress'] = f'Error: {e}'
+                                        finally:
+                                            dqn_training_state['done'] = True
+
+                                    t = threading.Thread(target=_train_dqn_thread, daemon=True)
+                                    t.start()
+
+                            elif action == 'play_dqn':
+                                play_click()
+                                print('[MENU] Play vs DQN clicked')
+                                import player as player_mod
+                                dqn_human = player_mod.Player(is_human=True)
+                                dqn_ai = player_mod.DQNPlayer()
+                                if dqn_ai.load_model():
+                                    state = MENU_DQN_PLAY
+                                    config.pipes.clear()
+                                    game_state['pipes_spawn_time'] = 10
+                                    game_state['score'] = 0
+                                    dqn_play_players = [dqn_human, dqn_ai]
+                                    print('[DQN] Starting Play vs DQN mode')
+                                else:
+                                    show_notification('No trained DQN! Train first.')
+                                    print('[DQN] No model found')
+
                             elif action == 'instructions':
                                 play_click()
                                 state = MENU_INSTRUCTIONS
@@ -978,8 +1540,6 @@ def main():
                                 set_music('menu')
                             elif action == 'exit':
                                 play_click()
-                                pygame.quit()
-                                exit()
                                 pygame.quit()
                                 exit()
             
@@ -996,6 +1556,54 @@ def main():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     state = MENU_MAIN
                     set_music('menu')
+
+            if state == MENU_DQN_TRAIN:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    dqn_training_state['running'] = False
+                    dqn_training_state['done'] = True
+                    state = MENU_MAIN
+
+            if state in (MENU_SIM_CLONE, MENU_DQN_PLAY):
+                active_players = sim_clone_state['players'] if state == MENU_SIM_CLONE else dqn_play_players
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if 'slider_track' in control_rects and (control_rects['slider_track'].collidepoint(event.pos) or control_rects['slider_knob'].collidepoint(event.pos)):
+                        ui_state['slider_dragging'] = True
+                        update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
+                    elif 'jump_track' in control_rects and (control_rects['jump_track'].collidepoint(event.pos) or control_rects['jump_knob'].collidepoint(event.pos)):
+                        ui_state['jump_dragging'] = True
+                        update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
+                    elif 'pause' in control_rects and control_rects['pause'].collidepoint(event.pos):
+                        play_click()
+                        ui_state['is_paused'] = not ui_state['is_paused']
+                    elif 'restart' in control_rects and control_rects['restart'].collidepoint(event.pos):
+                        play_click()
+                        config.pipes.clear()
+                        game_state['pipes_spawn_time'] = 10
+                        game_state['score'] = 0
+                        for p in active_players:
+                            p.alive = True
+                            p.rect.centery = config.win_height // 2
+                            p.vel = 0
+                    elif 'back' in control_rects and control_rects['back'].collidepoint(event.pos):
+                        play_click()
+                        state = MENU_MAIN
+                        set_music('menu')
+                if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                    ui_state['slider_dragging'] = False
+                    ui_state['jump_dragging'] = False
+                if event.type == pygame.MOUSEMOTION and ui_state['slider_dragging'] and 'slider_track' in control_rects:
+                    update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
+                if event.type == pygame.MOUSEMOTION and ui_state['jump_dragging'] and 'jump_track' in control_rects:
+                    update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        state = MENU_MAIN
+                        set_music('menu')
+                    else:
+                        for p in active_players:
+                            if p.is_human:
+                                p.handle_event(event)
+
             if state == MENU_PVC:
                 # Control panel interactions
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -1013,7 +1621,6 @@ def main():
                         ui_state['is_paused'] = not ui_state['is_paused']
                     elif 'restart' in control_rects and control_rects['restart'].collidepoint(event.pos):
                         play_click()
-                        # Restart PvC game
                         config.pipes.clear()
                         game_state['pipes_spawn_time'] = 10
                         game_state['score'] = 0
@@ -1032,26 +1639,32 @@ def main():
                     update_slider_from_mouse(event.pos[0], control_rects['slider_track'])
                 if event.type == pygame.MOUSEMOTION and ui_state['jump_dragging'] and 'jump_track' in control_rects:
                     update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
-                # Player controls
+                # Player controls + Recording toggle
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         state = MENU_MAIN
                         set_music('menu')
+                    elif event.key == pygame.K_r:
+                        # Toggle recording for behavioral cloning
+                        if bc_recorder is not None:
+                            if bc_recorder.recording:
+                                bc_recorder.stop()
+                                count = bc_recorder.save()
+                                show_notification(f'Recording saved! {count} samples')
+                            else:
+                                bc_recorder.start()
+                                show_notification('Recording started... Press R to stop')
                     elif event.key == pygame.K_l:
-                        # Load champion for AI player
                         try:
                             import pickle
-                            import os
                             filename = 'champion.pkl'
                             if os.path.exists(filename):
                                 with open(filename, 'rb') as f:
                                     champion_brain = pickle.load(f)
                                 show_notification('Champion AI Loaded for PvC!')
-                                # Update AI player with loaded champion
                                 for p in pvc_players:
                                     if not p.is_human:
                                         p.brain = champion_brain.clone()
-                                        # Reset AI player state
                                         p.alive = True
                                         p.rect.centery = config.win_height // 2
                                         p.vel = 0
@@ -1068,6 +1681,20 @@ def main():
                         for p in pvc_players:
                             if p.is_human:
                                 p.handle_event(event)
+
+                # Capture BC data each frame during PvC
+                if bc_recorder and bc_recorder.recording:
+                    human = next((p for p in pvc_players if p.is_human), None)
+                    if human and human.alive:
+                        keys = pygame.key.get_pressed()
+                        if keys[pygame.K_SPACE] or keys[pygame.K_UP]:
+                            action = 1
+                        elif keys[pygame.K_DOWN]:
+                            action = -1
+                        else:
+                            action = 0
+                        human.look()
+                        bc_recorder.capture(human.vision, action)
 
             elif state == MENU_GAME:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:

@@ -110,6 +110,15 @@ class Brain:
         return output
 
     def clone(self):
+        # Compatibility check for old saved models
+        if not hasattr(self, 'bias_index'):
+            self.bias_index = self.inputs
+        if not hasattr(self, 'output_index'):
+            current_id = self.inputs + 1
+            for h_count in self.hidden_layers:
+                current_id += h_count
+            self.output_index = current_id
+
         clone = Brain(self.inputs, self.hidden_layers, True)
 
         for n in self.nodes:
@@ -135,6 +144,15 @@ class Brain:
                 return n
 
     def mutate(self):
+        # 80% chance: perturb weights
         if random.random() < 0.8:
             for c in self.connections:
                 c.mutate_weight()
+        # 10% chance: reset a random connection weight entirely
+        if random.random() < 0.1 and self.connections:
+            c = random.choice(self.connections)
+            c.weight = random.uniform(-1, 1)
+        # 5% chance: toggle a random connection on/off (flip sign)
+        if random.random() < 0.05 and self.connections:
+            c = random.choice(self.connections)
+            c.weight *= -1

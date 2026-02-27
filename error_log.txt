@@ -1,26 +1,16 @@
 Traceback (most recent call last):
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 868, in <module>
+  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 1122, in <module>
     main()
     ~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 748, in main
-    run_game_step()
+  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 904, in main
+    handle_common_events(event)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 133, in handle_common_events
+    config.toggle_fullscreen()
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\config.py", line 28, in toggle_fullscreen
+    create_window()
     ~~~~~~~~~~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 393, in run_game_step
-    simulation_tick()
-    ~~~~~~~~~~~~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 387, in simulation_tick
-    population_manager.natural_selection()
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\population.py", line 42, in natural_selection
-    self.next_gen()
-    ~~~~~~~~~~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\population.py", line 99, in next_gen
-    children.append(s.champion.clone())
-                    ~~~~~~~~~~~~~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\player.py", line 142, in clone
-    clone.brain = self.brain.clone()
-                  ~~~~~~~~~~~~~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\brain.py", line 123, in clone
-    clone.output_node = clone.get_node(self.output_index)
-                                       ^^^^^^^^^^^^^^^^^
-AttributeError: 'Brain' object has no attribute 'output_index'. Did you mean: 'output_node'?
+  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\config.py", line 21, in create_window
+    window = pygame.display.set_mode((win_width, win_height), flags)
+pygame.error: ChangeDisplaySettingsEx() failed: DISP_CHANGE_FAILED

@@ -28,7 +28,7 @@ class Player:
         self.score = 0
         self.inputs = 4
 
-        self.brain = brain.Brain(self.inputs)
+        self.brain = brain.Brain(self.inputs, hidden_layers=[6])
         self.brain.generate_net()
     # ---------------- Utility ----------------
     def clamp(self, v, lo=-1, hi=1):
@@ -54,6 +54,12 @@ class Player:
     def pipe_collision(self):
         p = self.closest_pipe()
         if p:
+            # MultiHolePipes has multiple wall segments — check all of them
+            if hasattr(p, 'wall_rects'):
+                for wr in p.wall_rects:
+                    if self.rect.colliderect(wr):
+                        return True
+                return False
             return self.rect.colliderect(p.top_rect) or self.rect.colliderect(p.bottom_rect)
         return False
 
@@ -68,13 +74,13 @@ class Player:
             self.vel = 0
 
     def bird_flap(self, generation=1):
-        # Small impulse; allow repeated taps without locking out
         if not self.sky_collision():
-            boost_factor = 1.02 if generation % 10 == 0 else 1.0
-            # Human players get much stronger jump
-            human_multiplier = 3.5 if self.is_human else 1.0
-            impulse = 2.2 * boost_factor * config.jump_scale * human_multiplier
-            ceiling = -5 * boost_factor * config.jump_scale * human_multiplier
+            if self.is_human:
+                impulse = 7.5 * config.jump_scale
+                ceiling = -17.0 * config.jump_scale
+            else:
+                impulse = 3.8 * config.jump_scale
+                ceiling = -6.0 * config.jump_scale
             self.vel = max(self.vel - impulse, ceiling)
 
     def bird_drop(self):
@@ -113,31 +119,25 @@ class Player:
         # Before the first pipe is in range, hover near screen center
         first_pipe = self.closest_pipe()
         if not first_pipe:
-            target_y = config.win_height * 0.5
-            if self.rect.centery < target_y - 5:
-                self.bird_drop()
-            elif self.rect.centery > target_y + 5:
+            target_y = config.win_height * 0.45
+            if self.rect.centery > target_y + 10:
                 self.bird_flap(generation)
             return
 
         decision = self.brain.feed_forward(self.vision)
 
-        # Anneal exploratory noise: higher early generations, near-zero after ~25
-        fail_prob = max(0.02, 0.85 * math.exp(-0.12 * max(0, generation - 1)))
-        if random.random() < fail_prob:
-            return  # deliberately skip action to allow early failures
+        # Light exploration noise that anneals over generations
+        noise_scale = max(0.01, 0.08 * math.exp(-0.08 * generation))
+        noisy_decision = decision + random.gauss(0, noise_scale)
 
-        noisy_decision = decision + random.uniform(-0.1, 0.1) * fail_prob
-
-        # >0.55: small flap up; <0.45: nudge downward; middle: glide
-        if noisy_decision > 0.55:
+        # >0.5  → flap, ≤0.5 → glide/drop
+        if noisy_decision > 0.5:
             self.bird_flap(generation)
-        elif noisy_decision < 0.45:
-            self.bird_drop()
 
     def calculate_fitness(self):
-        center_penalty = abs(self.vision[0])
-        self.fitness = self.lifespan + (self.score * 500) - (center_penalty * 50)
+        # Reward: surviving longer + passing pipes + being near the gap center
+        gap_bonus = max(0, 1.0 - abs(self.vision[0])) * 100
+        self.fitness = (self.lifespan * 2) + (self.score * 1000) + gap_bonus
 
     def clone(self):
         clone = Player()
@@ -152,3 +152,80 @@ class Player:
                 self.bird_flap()
             if event.key == pygame.K_DOWN:
                 self.bird_drop()
+
+
+class BCPlayer(Player):
+    """AI player controlled by a trained Behavioral Cloning model."""
+
+    def __init__(self):
+        super().__init__(is_human=False)
+        self._bc_model = None
+        # Tint sprite blue for visual distinction
+        self.hk_run = self._tint_sprite(self.hk_run, (100, 150, 255))
+        self.hk_air = self._tint_sprite(self.hk_air, (100, 150, 255))
+
+    @staticmethod
+    def _tint_sprite(surface, color):
+        tinted = surface.copy()
+        tinted.fill(color, special_flags=pygame.BLEND_RGB_MULT)
+        return tinted
+
+    def load_model(self):
+        from behavioral_cloning import BCTrainer
+        self._bc_model = BCTrainer.load_model()
+        return self._bc_model is not None
+
+    def think(self, generation=1):
+        if self._bc_model is None:
+            return
+        self.look()
+        action = self._bc_model.predict_action(self.vision)
+        if action == 1:
+            self.bird_flap(generation)
+        elif action == -1:
+            self.bird_drop()
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        # Blue circle indicator for BC player
+        pygame.draw.circle(window, (100, 150, 255), self.rect.center, 25, 2)
+        window.blit(sprite, self.rect)
+
+
+class DQNPlayer(Player):
+    """AI player controlled by a trained DQN model."""
+
+    def __init__(self):
+        super().__init__(is_human=False)
+        self._dqn_model = None
+        # Tint sprite orange for visual distinction
+        self.hk_run = self._tint_sprite(self.hk_run, (255, 180, 80))
+        self.hk_air = self._tint_sprite(self.hk_air, (255, 180, 80))
+
+    @staticmethod
+    def _tint_sprite(surface, color):
+        tinted = surface.copy()
+        tinted.fill(color, special_flags=pygame.BLEND_RGB_MULT)
+        return tinted
+
+    def load_model(self):
+        from dqn_agent import DQNAgent
+        self._dqn_model = DQNAgent.load_model()
+        return self._dqn_model is not None
+
+    def think(self, generation=1):
+        if self._dqn_model is None:
+            return
+        self.look()
+        from dqn_agent import DQNAgent
+        action = DQNAgent.predict_action(self._dqn_model, self.vision)
+        if action == 1:
+            self.bird_flap(generation)
+        elif action == -1:
+            self.bird_drop()
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        # Orange circle indicator for DQN player
+        pygame.draw.circle(window, (255, 180, 80), self.rect.center, 25, 2)
+        window.blit(sprite, self.rect)
