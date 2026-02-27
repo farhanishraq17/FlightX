@@ -229,3 +229,84 @@ class DQNPlayer(Player):
         # Orange circle indicator for DQN player
         pygame.draw.circle(window, (255, 180, 80), self.rect.center, 25, 2)
         window.blit(sprite, self.rect)
+
+
+class HeuristicPlayer(Player):
+    """Mathematical AI that plays perfectly by targeting gap center."""
+    def __init__(self):
+        super().__init__(is_human=False)
+        self.hk_run = self.hk_run.copy()
+        self.hk_run.fill((0, 255, 255), special_flags=pygame.BLEND_RGB_MULT) # Cyan
+        self.hk_air = self.hk_air.copy()
+        self.hk_air.fill((0, 255, 255), special_flags=pygame.BLEND_RGB_MULT)
+
+    def think(self, generation=1):
+        p = self.closest_pipe()
+        if not p:
+            if self.rect.centery > config.win_height * 0.45:
+                self.bird_flap(generation)
+            return
+        
+        gap_y = (p.top_rect.bottom + p.bottom_rect.top) / 2
+        # Target exact center
+        if self.rect.centery > gap_y + 15 and self.vel >= -2:
+            self.bird_flap(generation)
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        pygame.draw.circle(window, (0, 255, 255), self.rect.center, 25, 2)
+        window.blit(sprite, self.rect)
+
+
+class CautiousPlayer(Player):
+    """Mathematical AI that prefers gliding low beneath the upper pipe."""
+    def __init__(self):
+        super().__init__(is_human=False)
+        self.hk_run = self.hk_run.copy()
+        self.hk_run.fill((255, 50, 255), special_flags=pygame.BLEND_RGB_MULT) # Magenta
+        self.hk_air = self.hk_air.copy()
+        self.hk_air.fill((255, 50, 255), special_flags=pygame.BLEND_RGB_MULT)
+
+    def think(self, generation=1):
+        p = self.closest_pipe()
+        if not p:
+            if self.rect.centery > config.win_height * 0.55:
+                self.bird_flap(generation)
+            return
+        
+        # Target lower half of the gap
+        safe_y = p.bottom_rect.top - 40
+        if self.rect.centery > safe_y and self.vel >= -2:
+            self.bird_flap(generation)
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        pygame.draw.circle(window, (255, 50, 255), self.rect.center, 25, 2)
+        window.blit(sprite, self.rect)
+
+
+class AggressivePlayer(Player):
+    """Mathematical AI that hugs the top pipe."""
+    def __init__(self):
+        super().__init__(is_human=False)
+        self.hk_run = self.hk_run.copy()
+        self.hk_run.fill((255, 255, 50), special_flags=pygame.BLEND_RGB_MULT) # Yellow
+        self.hk_air = self.hk_air.copy()
+        self.hk_air.fill((255, 255, 50), special_flags=pygame.BLEND_RGB_MULT)
+
+    def think(self, generation=1):
+        p = self.closest_pipe()
+        if not p:
+            if self.rect.centery > config.win_height * 0.35:
+                self.bird_flap(generation)
+            return
+        
+        # Target upper half of the gap
+        safe_y = p.top_rect.bottom + 40
+        if self.rect.centery > safe_y and self.vel >= -2:
+            self.bird_flap(generation)
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        pygame.draw.circle(window, (255, 255, 50), self.rect.center, 25, 2)
+        window.blit(sprite, self.rect)
