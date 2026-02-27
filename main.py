@@ -2,6 +2,7 @@ import os
 import pygame
 from sys import exit
 import threading
+import random
 import config
 import components
 import population
@@ -78,6 +79,7 @@ sim_clone_state = {
     'round': 0,
     'history': {'NEAT': [], 'BC': [], 'DQN': [], 'Heuristic': [], 'Cautious': [], 'Aggressive': []},
     'best_scores': {'NEAT': 0, 'BC': 0, 'DQN': 0, 'Heuristic': 0, 'Cautious': 0, 'Aggressive': 0},
+    'show_info': False,      # toggle center overlay
 }
 
 # DQN state
@@ -498,6 +500,40 @@ def draw_neural_net(window, brain, rect):
 def generate_graph_image(force=False):
     render_graph(save_path='score_graph.png', show_window=False, force=force)
 
+def show_sim_clone_graph():
+    history = sim_clone_state['history']
+    if not any(history.values()):
+        return
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    for algo, color_tup in ALGO_COLORS.items():
+        scores = history.get(algo, [])
+        if scores:
+            c = (color_tup[0]/255, color_tup[1]/255, color_tup[2]/255)
+            ax.plot(range(len(scores)), scores, marker='.', linestyle='-', color=c, label=algo, alpha=0.8)
+
+    ax.set_xlabel('Round')
+    ax.set_ylabel('Total Score')
+    ax.set_title('Simulate Clone: Algorithm Progress')
+    ax.grid(True, linestyle='--', alpha=0.5)
+    ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1))
+    fig.tight_layout()
+
+    if INTERACTIVE_BACKEND:
+        fig.canvas.manager.set_window_title('Simulate Clone Graph')
+        fig.canvas.draw_idle()
+        plt.show(block=True)
+        plt.close(fig)
+    else:
+        target = 'sim_clone_graph.png'
+        fig.savefig(target)
+        try:
+            os.startfile(target)
+        except Exception:
+            pass
+        plt.close(fig)
+
+
 
 def show_graph_window():
     render_graph(save_path='score_graph.png', show_window=True, force=True)
@@ -688,95 +724,13 @@ def _init_sim_clone_players():
         players.append(p)
         algo_map[id(p)] = 'Aggressive'
 
+    # Add positional jitter to all players to prevent perfect visual overlap
+    for p in players:
+        p.rect.centery += random.randint(-40, 40)
+        p.rect.centerx += random.randint(-20, 20)
+
     return players, algo_map
 
-
-def _draw_sim_clone_panel(window, font):
-    """Draw bottom control panel with algorithm legend, plane count, and live graph."""
-    panel_h = 180
-    panel_y = config.win_height - panel_h
-    # Semi-transparent background
-    panel_surf = pygame.Surface((config.win_width, panel_h), pygame.SRCALPHA)
-    panel_surf.fill((10, 10, 20, 210))
-    window.blit(panel_surf, (0, panel_y))
-
-    # Divider line
-    pygame.draw.line(window, (80, 80, 120), (0, panel_y), (config.win_width, panel_y), 2)
-
-    small_font = pygame.font.Font('font/Pixeltype.ttf', 22)
-    y = panel_y + 8
-
-    # ─── Left: Legend + controls ───
-    lbl = font.render('ALGORITHM LEGEND', True, (220, 220, 255))
-    window.blit(lbl, (15, y))
-    y += 28
-    for algo, color in ALGO_COLORS.items():
-        pygame.draw.circle(window, color, (28, y + 6), 6)
-        alive = sum(1 for p in sim_clone_state['players']
-                    if sim_clone_state['algo_map'].get(id(p)) == algo and p.alive)
-        total = sum(1 for p in sim_clone_state['players']
-                    if sim_clone_state['algo_map'].get(id(p)) == algo)
-        best = sim_clone_state['best_scores'].get(algo, 0)
-        txt = small_font.render(f'{algo}: {alive}/{total} alive  Best={best}', True, color)
-        window.blit(txt, (42, y))
-        y += 18
-
-    # Plane count controls
-    y += 2
-    n = sim_clone_state['planes_per_algo']
-    ctrl = small_font.render(f'Planes per algo: {n}   [-] [+]', True, (200, 200, 200))
-    window.blit(ctrl, (15, y))
-    # Store button rects for click detection
-    sim_clone_state['_minus_rect'] = pygame.Rect(15 + ctrl.get_width() - 75, y, 25, 20)
-    sim_clone_state['_plus_rect'] = pygame.Rect(15 + ctrl.get_width() - 40, y, 25, 20)
-    y += 22
-    round_lbl = small_font.render(f'Round: {sim_clone_state["round"]}   Score: {game_state["score"]}', True, (180, 180, 180))
-    window.blit(round_lbl, (15, y))
-
-    # ─── Right: Live performance graph ───
-    graph_x = max(220, config.win_width // 2 - 20)
-    graph_y = panel_y + 12
-    graph_w = config.win_width - graph_x - 15
-    graph_h = panel_h - 24
-
-    # Graph background
-    pygame.draw.rect(window, (20, 20, 35), (graph_x, graph_y, graph_w, graph_h))
-    pygame.draw.rect(window, (60, 60, 90), (graph_x, graph_y, graph_w, graph_h), 1)
-
-    # Title
-    g_title = small_font.render('Score per Round', True, (180, 180, 220))
-    window.blit(g_title, (graph_x + 5, graph_y + 2))
-
-    # Plot lines for each algorithm
-    history = sim_clone_state['history']
-    all_scores = [s for v in history.values() for s in v]
-    max_score = max(all_scores) if all_scores else 1
-    max_rounds = max(len(v) for v in history.values()) if any(history.values()) else 1
-
-    plot_x = graph_x + 5
-    plot_y = graph_y + 20
-    plot_w = graph_w - 10
-    plot_h = graph_h - 28
-
-    # Grid lines
-    for gi in range(5):
-        gy = plot_y + int(plot_h * gi / 4)
-        pygame.draw.line(window, (40, 40, 60), (plot_x, gy), (plot_x + plot_w, gy), 1)
-
-    for algo, color in ALGO_COLORS.items():
-        scores = history.get(algo, [])
-        if len(scores) < 2:
-            continue
-        points = []
-        for i, s in enumerate(scores[-30:]):  # Show last 30 rounds
-            px = plot_x + int(plot_w * i / min(29, len(scores) - 1))
-            py = plot_y + plot_h - int(plot_h * min(s, max_score) / max(max_score, 1))
-            points.append((px, py))
-        if len(points) >= 2:
-            pygame.draw.lines(window, color, False, points, 2)
-        # Dot at latest point
-        if points:
-            pygame.draw.circle(window, color, points[-1], 4)
 
 
 def run_simulate_clone_step():
@@ -800,11 +754,21 @@ def run_simulate_clone_step():
             if p.off_screen:
                 config.pipes.remove(p)
 
+        # Track current round scores per algorithm continuously
+        if 'round_scores' not in sim_clone_state:
+            sim_clone_state['round_scores'] = {algo: 0 for algo in ALGO_COLORS}
+
         for p in all_players:
             if p.alive:
                 p.look()
                 p.think(generation=100)
                 p.update(config.ground)
+                # Max score achieved by this algo in the current round
+                algo = sim_clone_state['algo_map'].get(id(p), 'NEAT')
+                sim_clone_state['round_scores'][algo] = max(
+                    sim_clone_state['round_scores'].get(algo, 0),
+                    game_state['score']
+                )
 
         update_obstacles_tick(all_players)
 
@@ -812,14 +776,14 @@ def run_simulate_clone_step():
         if all(not p.alive for p in all_players) and len(all_players) > 0:
             # Record scores per algo
             for algo in ALGO_COLORS:
-                sim_clone_state['history'][algo].append(game_state['score'])
-                if game_state['score'] > sim_clone_state['best_scores'].get(algo, 0):
-                    # Check if any of this algo's planes were the last alive
-                    sim_clone_state['best_scores'][algo] = max(
-                        sim_clone_state['best_scores'].get(algo, 0),
-                        game_state['score']
-                    )
+                score = sim_clone_state['round_scores'].get(algo, 0)
+                sim_clone_state['history'][algo].append(score)
+                sim_clone_state['best_scores'][algo] = max(
+                    sim_clone_state['best_scores'].get(algo, 0),
+                    score
+                )
             sim_clone_state['round'] += 1
+            sim_clone_state['round_scores'] = {algo: 0 for algo in ALGO_COLORS}
 
             # Reset
             config.pipes.clear()
@@ -853,14 +817,6 @@ def run_simulate_clone_step():
             cx = pl.rect.centerx
             cy = pl.rect.centery
             pygame.draw.circle(config.window, color, (cx, cy), 14, 2)
-
-    # Score display
-    font = pygame.font.Font('font/Pixeltype.ttf', 36)
-    score_txt = font.render(f'Score: {game_state["score"]}', True, (255, 255, 255))
-    config.window.blit(score_txt, (config.win_width // 2 - 50, 15))
-
-    # Bottom panel
-    _draw_sim_clone_panel(config.window, font)
 
     render_notification()
 
@@ -1091,7 +1047,7 @@ def render_instructions(menu_font):
     config.window.blit(back_surf, back_rect)
 
 
-def draw_control_panel(menu_font):
+def draw_control_panel(state, menu_font):
     ground_y = components.Ground.ground_level
     ground_h = getattr(config.ground, 'rect', pygame.Rect(0, 0, 0, 8)).height if config.ground else 8
     panel_y = ground_y + ground_h
@@ -1103,9 +1059,15 @@ def draw_control_panel(menu_font):
     dark = (20, 20, 20)
     grey = (180, 180, 180)
 
-    # Iteration counter top-right
+    rects_to_return = {}
+
+    # Iteration counter / Round counter top-right
     iter_font = pygame.font.Font('font/Pixeltype.ttf', max(22, int(menu_font.get_height() * 0.95)))
-    iter_text = iter_font.render(f'Number of Iterations: {population_manager.generation}', True, white)
+    text_content = f'Number of Iterations: {population_manager.generation}'
+    if state == MENU_SIM_CLONE:
+        text_content = f'Round: {sim_clone_state["round"]}'
+        
+    iter_text = iter_font.render(text_content, True, white)
     iter_rect = iter_text.get_rect(topright=(panel_rect.right - padding, panel_rect.top + padding))
     config.window.blit(iter_text, iter_rect)
 
@@ -1133,18 +1095,33 @@ def draw_control_panel(menu_font):
     speed_label = menu_font.render(f'Speed: {ui_state["simulation_speed"]:.1f}', True, white)
     speed_rect = speed_label.get_rect(left=slider_track.left, top=slider_track.bottom + 6)
     config.window.blit(speed_label, speed_rect)
+    
+    rects_to_return['slider_track'] = slider_track
+    rects_to_return['slider_knob'] = knob_rect
 
-    # Jump control slider
+    # Jump control slider OR Plane control
     jump_track = pygame.Rect(slider_track.left, speed_rect.bottom + max(10, int(menu_font.get_height() * 0.4)), slider_width, 12)
-    pygame.draw.rect(config.window, grey, jump_track, border_radius=6)
-    jump_ratio = (config.jump_scale - 0.5) / 1.5
-    jump_knob_x = jump_track.left + jump_ratio * jump_track.width
-    jump_knob = pygame.Rect(0, 0, 18, 24)
-    jump_knob.center = (jump_knob_x, jump_track.centery)
-    pygame.draw.rect(config.window, white, jump_knob, border_radius=6)
-    jump_label = menu_font.render(f'Jump: {config.jump_scale:.2f}x', True, white)
-    jump_rect = jump_label.get_rect(left=jump_track.left, top=jump_track.bottom + 6)
-    config.window.blit(jump_label, jump_rect)
+    if state == MENU_SIM_CLONE:
+        small_font = pygame.font.Font('font/Pixeltype.ttf', max(24, int(menu_font.get_height() * 0.8)))
+        n = sim_clone_state['planes_per_algo']
+        ctrl = small_font.render(f'Planes per algo: {n}   [-] [+]', True, white)
+        config.window.blit(ctrl, (jump_track.left, jump_track.top))
+        sim_clone_state['_minus_rect'] = pygame.Rect(jump_track.left + ctrl.get_width() - 55, jump_track.top, 25, 20)
+        sim_clone_state['_plus_rect'] = pygame.Rect(jump_track.left + ctrl.get_width() - 25, jump_track.top, 25, 20)
+        rects_to_return['_minus_rect'] = sim_clone_state['_minus_rect']
+        rects_to_return['_plus_rect'] = sim_clone_state['_plus_rect']
+    else:
+        pygame.draw.rect(config.window, grey, jump_track, border_radius=6)
+        jump_ratio = (config.jump_scale - 0.5) / 1.5
+        jump_knob_x = jump_track.left + jump_ratio * jump_track.width
+        jump_knob = pygame.Rect(0, 0, 18, 24)
+        jump_knob.center = (jump_knob_x, jump_track.centery)
+        pygame.draw.rect(config.window, white, jump_knob, border_radius=6)
+        jump_label = menu_font.render(f'Jump: {config.jump_scale:.2f}x', True, white)
+        jump_rect = jump_label.get_rect(left=jump_track.left, top=jump_track.bottom + 6)
+        config.window.blit(jump_label, jump_rect)
+        rects_to_return['jump_track'] = jump_track
+        rects_to_return['jump_knob'] = jump_knob
 
     # Lines toggle (auto-stacks if narrow)
     toggle_w = max(180, int(config.win_width * 0.22))
@@ -1158,11 +1135,12 @@ def draw_control_panel(menu_font):
     else:
         toggle_w = min(toggle_w, panel_rect.width - padding * 2)
         toggle_x = panel_rect.left + padding
-        toggle_y = jump_rect.bottom + max(10, int(menu_font.get_height() * 0.5))
+        toggle_y = jump_track.bottom + 30 if state == MENU_SIM_CLONE else jump_rect.bottom + max(10, int(menu_font.get_height() * 0.5))
     toggle_rect = pygame.Rect(toggle_x, toggle_y, toggle_w, toggle_h)
     pygame.draw.rect(config.window, white, toggle_rect, border_radius=6)
     toggle_label = menu_font.render(f'Lines: {"ON" if config.show_lines else "OFF"}', True, dark)
     config.window.blit(toggle_label, toggle_label.get_rect(center=toggle_rect.center))
+    rects_to_return['lines_toggle'] = toggle_rect
 
     # Pause / Restart shifted right but clamped
     btn_w = max(160, int(config.win_width * 0.18))
@@ -1185,59 +1163,84 @@ def draw_control_panel(menu_font):
     restart_label = menu_font.render('Restart', True, dark)
     config.window.blit(pause_label, pause_label.get_rect(center=pause_rect.center))
     config.window.blit(restart_label, restart_label.get_rect(center=restart_rect.center))
+    
+    rects_to_return['pause'] = pause_rect
+    rects_to_return['restart'] = restart_rect
 
-    # Info box (Reward/Punishment/Jump/Planes) floats between slider and pause/restart, above the lines toggle
+    # Info box OR Toggle Info Button
     info_font = pygame.font.Font('font/Pixeltype.ttf', max(14, int(menu_font.get_height() * 0.65)))
-    alive_count = sum(1 for p in population_manager.players if p.alive)
-    jump_factor = 1.02 if population_manager.generation % 10 == 0 else 1.0
-    jump_impulse = round(2.2 * jump_factor * config.jump_scale, 2)
-    info_items = [
-        'Reward: +7',
-        'Punishment: -1000',
-        f'Jump: {jump_impulse}',
-        f'Planes Alive: {alive_count}/{len(population_manager.players)}',
-    ]
-    line_surfs = [info_font.render(t, True, white) for t in info_items]
-    box_padding = max(5, int(config.win_width * 0.0040))
-    box_width = max(s.get_width() for s in line_surfs) + box_padding * 2
-    box_height = sum(s.get_height() for s in line_surfs) + box_padding * 2 + (len(line_surfs) - 1) * 3
-
     min_x = slider_track.right + padding
-    max_x = pause_rect.left - padding - box_width
-    if max_x < min_x:
-        box_x = max_x
+    
+    if state == MENU_SIM_CLONE:
+        med_font = pygame.font.Font('font/Pixeltype.ttf', 32)
+        info_txt = med_font.render('Toggle Info', True, dark)
+        info_rect = info_txt.get_rect(topleft=(min_x, panel_rect.top + padding + 5))
+        info_bg = info_rect.inflate(20, 10)
+        pygame.draw.rect(config.window, (200, 200, 255), info_bg, border_radius=5)
+        config.window.blit(info_txt, info_rect)
+        sim_clone_state['_info_btn'] = info_bg
+        rects_to_return['_info_btn'] = info_bg
+        box_right = info_bg.right
     else:
-        box_x = min_x
-    box_x = max(panel_rect.left + padding, min(box_x, panel_rect.right - padding - box_width))
+        alive_count = sum(1 for p in population_manager.players if p.alive)
+        jump_factor = 1.02 if population_manager.generation % 10 == 0 else 1.0
+        jump_impulse = round(2.2 * jump_factor * config.jump_scale, 2)
+        info_items = [
+            'Reward: +7',
+            'Punishment: -1000',
+            f'Jump: {jump_impulse}',
+            f'Planes Alive: {alive_count}/{len(population_manager.players)}',
+        ]
+        line_surfs = [info_font.render(t, True, white) for t in info_items]
+        box_padding = max(5, int(config.win_width * 0.0040))
+        box_width = max(s.get_width() for s in line_surfs) + box_padding * 2
+        box_height = sum(s.get_height() for s in line_surfs) + box_padding * 2 + (len(line_surfs) - 1) * 3
 
-    up_shift = max(4, int(menu_font.get_height() * 0.1))
-    desired_y = slider_track.top - up_shift
-    limit_y = toggle_rect.top - padding - box_height
-    box_y = max(panel_rect.top + padding, min(desired_y, limit_y))
+        max_x = pause_rect.left - padding - box_width
+        if max_x < min_x:
+            box_x = max_x
+        else:
+            box_x = min_x
+        box_x = max(panel_rect.left + padding, min(box_x, panel_rect.right - padding - box_width))
 
-    info_box = pygame.Rect(box_x, box_y, box_width, box_height)
-    pygame.draw.rect(config.window, (30, 30, 30), info_box, border_radius=6)
-    pygame.draw.rect(config.window, white, info_box, width=1, border_radius=6)
+        up_shift = max(4, int(menu_font.get_height() * 0.1))
+        desired_y = slider_track.top - up_shift
+        limit_y = toggle_rect.top - padding - box_height
+        box_y = max(panel_rect.top + padding, min(desired_y, limit_y))
 
-    cursor_y = info_box.top + box_padding
-    for surf in line_surfs:
-        rect = surf.get_rect(left=info_box.left + box_padding, top=cursor_y)
-        config.window.blit(surf, rect)
-        cursor_y += surf.get_height() + 3
+        info_box = pygame.Rect(box_x, box_y, box_width, box_height)
+        pygame.draw.rect(config.window, (30, 30, 30), info_box, border_radius=6)
+        pygame.draw.rect(config.window, white, info_box, width=1, border_radius=6)
+
+        cursor_y = info_box.top + box_padding
+        for surf in line_surfs:
+            rect = surf.get_rect(left=info_box.left + box_padding, top=cursor_y)
+            config.window.blit(surf, rect)
+            cursor_y += surf.get_height() + 3
+            
+        box_right = info_box.right
 
     # Graph box - more compact version
     box_gap = max(10, int(config.win_width * 0.01))
     graph_width = max(60, int(config.win_width * 0.072))  # Reduced by 40%
     graph_height = max(36, int(menu_font.get_height() * 1.5))  # Reduced by 40%
-    graph_x = min(pause_rect.left - padding - graph_width, info_box.right + box_gap)
+    graph_x = min(pause_rect.left - padding - graph_width, box_right + box_gap)
     graph_x = max(panel_rect.left + padding, min(graph_x, panel_rect.right - padding - graph_width))
-    graph_y = box_y
+    graph_y = panel_rect.top + padding + 4 if state == MENU_SIM_CLONE else box_y
     graph_box = pygame.Rect(graph_x, graph_y, graph_width, graph_height)
-    pygame.draw.rect(config.window, (30, 30, 30), graph_box, border_radius=6)
+    bg_col = (255, 200, 150) if state == MENU_SIM_CLONE else (30, 30, 30)
+    txt_col = dark if state == MENU_SIM_CLONE else white
+    pygame.draw.rect(config.window, bg_col, graph_box, border_radius=6)
     pygame.draw.rect(config.window, white, graph_box, width=1, border_radius=6)
     graph_font = pygame.font.Font('font/Pixeltype.ttf', max(12, int(menu_font.get_height() * 0.5)))
-    graph_text = graph_font.render('Graph', True, white)
+    graph_text = graph_font.render('Graph', True, txt_col)
     config.window.blit(graph_text, graph_text.get_rect(center=graph_box.center))
+    
+    if state == MENU_SIM_CLONE:
+        sim_clone_state['_graph_btn'] = graph_box
+        rects_to_return['_graph_btn'] = graph_box
+    else:
+        rects_to_return['graph'] = graph_box
 
     # Back to menu bottom-right
     back_rect = pygame.Rect(0, 0, max(260, int(config.win_width * 0.24)), max(48, int(menu_font.get_height() * 1.6)))
@@ -1245,18 +1248,37 @@ def draw_control_panel(menu_font):
     pygame.draw.rect(config.window, white, back_rect, border_radius=6)
     back_label = menu_font.render('Back to Menu', True, dark)
     config.window.blit(back_label, back_label.get_rect(center=back_rect.center))
+    
+    rects_to_return['back'] = back_rect
 
-    return {
-        'slider_track': slider_track,
-        'slider_knob': knob_rect,
-        'jump_track': jump_track,
-        'jump_knob': jump_knob,
-        'lines_toggle': toggle_rect,
-        'pause': pause_rect,
-        'restart': restart_rect,
-        'graph': graph_box,
-        'back': back_rect,
-    }
+    # Overlay Sim Clone Center Info if toggled
+    if state == MENU_SIM_CLONE and sim_clone_state.get('show_info', False):
+        overlay_w = 400
+        overlay_h = 300
+        overlay_x = config.win_width // 2 - overlay_w // 2
+        overlay_y = config.win_height // 2 - overlay_h // 2 - 50
+        
+        ov_surf = pygame.Surface((overlay_w, overlay_h), pygame.SRCALPHA)
+        ov_surf.fill((30, 30, 45, 230))
+        pygame.draw.rect(ov_surf, (100, 100, 150), ov_surf.get_rect(), 2, border_radius=10)
+        config.window.blit(ov_surf, (overlay_x, overlay_y))
+
+        title = font = pygame.font.Font('font/Pixeltype.ttf', 36).render('ALGORITHM STATS', True, (255, 255, 255))
+        config.window.blit(title, (overlay_x + overlay_w // 2 - title.get_width() // 2, overlay_y + 15))
+
+        oy = overlay_y + 60
+        med_font = pygame.font.Font('font/Pixeltype.ttf', 32)
+        for algo, col in ALGO_COLORS.items():
+            pygame.draw.circle(config.window, col, (overlay_x + 30, oy + 8), 8)
+            alive = sum(1 for p in sim_clone_state['players'] if sim_clone_state['algo_map'].get(id(p)) == algo and p.alive)
+            total = sum(1 for p in sim_clone_state['players'] if sim_clone_state['algo_map'].get(id(p)) == algo)
+            best = sim_clone_state['best_scores'].get(algo, 0)
+            
+            txt = med_font.render(f'{algo}:  {alive}/{total} alive   Best={best}', True, col)
+            config.window.blit(txt, (overlay_x + 50, oy))
+            oy += 35
+
+    return rects_to_return
 
 
 def render_instructions(menu_font):
@@ -1381,15 +1403,15 @@ def main():
         elif state == MENU_PVC:
             buttons = []
             run_pvc_game_step()
-            control_rects = draw_control_panel(menu_font)
+            control_rects = draw_control_panel(state, menu_font)
         elif state == MENU_SIM_CLONE:
             buttons = []
             run_simulate_clone_step()
-            control_rects = draw_control_panel(menu_font)
+            control_rects = draw_control_panel(state, menu_font)
         elif state == MENU_DQN_PLAY:
             buttons = []
             run_dqn_play_step()
-            control_rects = draw_control_panel(menu_font)
+            control_rects = draw_control_panel(state, menu_font)
         elif state == MENU_DQN_TRAIN:
             buttons = []
             render_dqn_training_screen(menu_font)
@@ -1402,7 +1424,7 @@ def main():
         elif state == MENU_GAME:
             buttons = []
             run_game_step()
-            control_rects = draw_control_panel(menu_font)
+            control_rects = draw_control_panel(state, menu_font)
 
         for event in events:
             handle_common_events(event)
@@ -1488,7 +1510,7 @@ def main():
                                     sim_clone_state['players'] = players
                                     sim_clone_state['algo_map'] = algo_map
                                     sim_clone_state['round'] = 0
-                                    sim_clone_state['history'] = {'NEAT': [], 'BC': [], 'DQN': []}
+                                    sim_clone_state['history'] = {algo: [] for algo in ALGO_COLORS}
                                     sim_clone_state['best_scores'] = {'NEAT': 0, 'BC': 0, 'DQN': 0}
                                     state = MENU_SIM_CLONE
                                     config.pipes.clear()
@@ -1596,6 +1618,9 @@ def main():
                     elif 'jump_track' in control_rects and (control_rects['jump_track'].collidepoint(event.pos) or control_rects['jump_knob'].collidepoint(event.pos)):
                         ui_state['jump_dragging'] = True
                         update_jump_from_mouse(event.pos[0], control_rects['jump_track'])
+                    elif 'lines_toggle' in control_rects and control_rects['lines_toggle'].collidepoint(event.pos):
+                        play_click()
+                        config.show_lines = not config.show_lines
                     elif 'pause' in control_rects and control_rects['pause'].collidepoint(event.pos):
                         play_click()
                         ui_state['is_paused'] = not ui_state['is_paused']
@@ -1612,6 +1637,49 @@ def main():
                         play_click()
                         state = MENU_MAIN
                         set_music('menu')
+                        
+                    if state == MENU_SIM_CLONE:
+                        if '_minus_rect' in sim_clone_state and sim_clone_state['_minus_rect'].collidepoint(event.pos):
+                            play_click()
+                            sim_clone_state['planes_per_algo'] = max(1, sim_clone_state['planes_per_algo'] - 1)
+                            # Apply immediately by resetting round
+                            config.pipes.clear()
+                            game_state['wind_zones'] = []
+                            game_state['coins'] = []
+                            game_state['flying_blocks'] = []
+                            game_state['falling_obstacles'] = []
+                            game_state['obstacle_counter'] = 0
+                            game_state['pipes_spawn_time'] = 10
+                            game_state['score'] = 0
+                            sim_clone_state['round_scores'] = {algo: 0 for algo in ALGO_COLORS}
+                            new_players, new_map = _init_sim_clone_players()
+                            sim_clone_state['players'] = new_players
+                            sim_clone_state['algo_map'] = new_map
+                            
+                        elif '_plus_rect' in sim_clone_state and sim_clone_state['_plus_rect'].collidepoint(event.pos):
+                            play_click()
+                            sim_clone_state['planes_per_algo'] = min(20, sim_clone_state['planes_per_algo'] + 1)
+                            # Apply immediately by resetting round
+                            config.pipes.clear()
+                            game_state['wind_zones'] = []
+                            game_state['coins'] = []
+                            game_state['flying_blocks'] = []
+                            game_state['falling_obstacles'] = []
+                            game_state['obstacle_counter'] = 0
+                            game_state['pipes_spawn_time'] = 10
+                            game_state['score'] = 0
+                            sim_clone_state['round_scores'] = {algo: 0 for algo in ALGO_COLORS}
+                            new_players, new_map = _init_sim_clone_players()
+                            sim_clone_state['players'] = new_players
+                            sim_clone_state['algo_map'] = new_map
+                            
+                        elif '_info_btn' in sim_clone_state and sim_clone_state['_info_btn'].collidepoint(event.pos):
+                            play_click()
+                            sim_clone_state['show_info'] = not sim_clone_state.get('show_info', False)
+                            
+                        elif '_graph_btn' in sim_clone_state and sim_clone_state['_graph_btn'].collidepoint(event.pos):
+                            play_click()
+                            show_sim_clone_graph()
                 if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                     ui_state['slider_dragging'] = False
                     ui_state['jump_dragging'] = False

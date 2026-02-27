@@ -200,7 +200,7 @@ class FlyingBlock:
     def __init__(self, win_width):
         self.x = win_width + random.randint(0, 100)
         self.y = random.randint(40, Ground.ground_level - 40)
-        self.speed = random.uniform(1.5, 3.0)
+        self.speed = random.uniform(1.0, 2.0)
         self.rect = pygame.Rect(self.x, self.y, self.SIZE, self.SIZE)
         self.off_screen = False
         self.wing_tick = 0
@@ -248,7 +248,7 @@ class FallingObstacle:
     def __init__(self, win_width):
         self.x = random.randint(50, win_width - 50)
         self.y = -self.HEIGHT  # start above screen
-        self.fall_speed = random.uniform(1.5, 3.5)
+        self.fall_speed = random.uniform(1.0, 2.0)
         self.rect = pygame.Rect(self.x, self.y, self.WIDTH, self.HEIGHT)
         self.off_screen = False
         self.rotation = 0

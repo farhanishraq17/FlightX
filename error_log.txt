@@ -1,14 +1,11 @@
 Traceback (most recent call last):
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 1773, in <module>
+  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 1840, in <module>
     main()
     ~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 1387, in main
-    run_simulate_clone_step()
-    ~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 840, in run_simulate_clone_step
-    simulation_tick()
-    ~~~~~~~~~~~~~~~^^
-  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 815, in simulation_tick
-    sim_clone_state['history'][algo].append(game_state['score'])
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
-KeyError: 'Heuristic'
+  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 1507, in main
+    players, algo_map = _init_sim_clone_players()
+                        ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 728, in _init_sim_clone_players
+    p.rect.centery += random.randint(-40, 40)
+                      ^^^^^^
+NameError: name 'random' is not defined. Did you forget to import 'random'?
