@@ -1,16 +1,14 @@
 Traceback (most recent call last):
-  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 1122, in <module>
+  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 1773, in <module>
     main()
     ~~~~^^
-  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 904, in main
-    handle_common_events(event)
-    ~~~~~~~~~~~~~~~~~~~~^^^^^^^
-  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 133, in handle_common_events
-    config.toggle_fullscreen()
-    ~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\config.py", line 28, in toggle_fullscreen
-    create_window()
-    ~~~~~~~~~~~~~^^
-  File "d:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\config.py", line 21, in create_window
-    window = pygame.display.set_mode((win_width, win_height), flags)
-pygame.error: ChangeDisplaySettingsEx() failed: DISP_CHANGE_FAILED
+  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 1387, in main
+    run_simulate_clone_step()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 840, in run_simulate_clone_step
+    simulation_tick()
+    ~~~~~~~~~~~~~~~^^
+  File "D:\Ishraqqq_New_Update\IUT\IUT CSE\Batch - 22\5th Semester\Simulation\Project\FlightX\main.py", line 815, in simulation_tick
+    sim_clone_state['history'][algo].append(game_state['score'])
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+KeyError: 'Heuristic'

@@ -64,17 +64,20 @@ bc_recorder = None
 
 # Simulate Clone state
 ALGO_COLORS = {
-    'NEAT':  (0, 255, 100),     # green
-    'BC':    (100, 150, 255),    # blue
-    'DQN':   (255, 160, 50),     # orange
+    'NEAT':       (0,   255, 100),   # green
+    'BC':         (100, 150, 255),   # blue
+    'DQN':        (255, 160, 50),    # orange
+    'Heuristic':  (0,   255, 255),   # cyan
+    'Cautious':   (255, 50,  255),   # magenta
+    'Aggressive': (255, 255, 50),    # yellow
 }
 sim_clone_state = {
     'players': [],           # list of Player objects
     'algo_map': {},          # player_id -> algo_name
-    'planes_per_algo': 1,    # how many of each algorithm
+    'planes_per_algo': 5,    # how many of each algorithm (increased for diversity)
     'round': 0,
-    'history': {'NEAT': [], 'BC': [], 'DQN': []},  # scores per round
-    'best_scores': {'NEAT': 0, 'BC': 0, 'DQN': 0},
+    'history': {'NEAT': [], 'BC': [], 'DQN': [], 'Heuristic': [], 'Cautious': [], 'Aggressive': []},
+    'best_scores': {'NEAT': 0, 'BC': 0, 'DQN': 0, 'Heuristic': 0, 'Cautious': 0, 'Aggressive': 0},
 }
 
 # DQN state
@@ -664,6 +667,27 @@ def _init_sim_clone_players():
         except:
             pass
 
+    # Heuristic players (always load)
+    for i in range(n):
+        p = player_mod.HeuristicPlayer()
+        p.color_tint = ALGO_COLORS['Heuristic']
+        players.append(p)
+        algo_map[id(p)] = 'Heuristic'
+
+    # Cautious players
+    for i in range(n):
+        p = player_mod.CautiousPlayer()
+        p.color_tint = ALGO_COLORS['Cautious']
+        players.append(p)
+        algo_map[id(p)] = 'Cautious'
+
+    # Aggressive players
+    for i in range(n):
+        p = player_mod.AggressivePlayer()
+        p.color_tint = ALGO_COLORS['Aggressive']
+        players.append(p)
+        algo_map[id(p)] = 'Aggressive'
+
     return players, algo_map
 
 
@@ -687,7 +711,7 @@ def _draw_sim_clone_panel(window, font):
     window.blit(lbl, (15, y))
     y += 28
     for algo, color in ALGO_COLORS.items():
-        pygame.draw.circle(window, color, (28, y + 8), 7)
+        pygame.draw.circle(window, color, (28, y + 6), 6)
         alive = sum(1 for p in sim_clone_state['players']
                     if sim_clone_state['algo_map'].get(id(p)) == algo and p.alive)
         total = sum(1 for p in sim_clone_state['players']
@@ -695,10 +719,10 @@ def _draw_sim_clone_panel(window, font):
         best = sim_clone_state['best_scores'].get(algo, 0)
         txt = small_font.render(f'{algo}: {alive}/{total} alive  Best={best}', True, color)
         window.blit(txt, (42, y))
-        y += 22
+        y += 18
 
     # Plane count controls
-    y += 5
+    y += 2
     n = sim_clone_state['planes_per_algo']
     ctrl = small_font.render(f'Planes per algo: {n}   [-] [+]', True, (200, 200, 200))
     window.blit(ctrl, (15, y))
