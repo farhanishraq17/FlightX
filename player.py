@@ -187,8 +187,6 @@ class BCPlayer(Player):
 
     def draw(self, window):
         sprite = self.hk_air if self.vel < -0.1 else self.hk_run
-        # Blue circle indicator for BC player
-        pygame.draw.circle(window, (100, 150, 255), self.rect.center, 25, 2)
         window.blit(sprite, self.rect)
 
 
@@ -226,8 +224,6 @@ class DQNPlayer(Player):
 
     def draw(self, window):
         sprite = self.hk_air if self.vel < -0.1 else self.hk_run
-        # Orange circle indicator for DQN player
-        pygame.draw.circle(window, (255, 180, 80), self.rect.center, 25, 2)
         window.blit(sprite, self.rect)
 
 
@@ -254,7 +250,6 @@ class HeuristicPlayer(Player):
 
     def draw(self, window):
         sprite = self.hk_air if self.vel < -0.1 else self.hk_run
-        pygame.draw.circle(window, (0, 255, 255), self.rect.center, 25, 2)
         window.blit(sprite, self.rect)
 
 
@@ -281,7 +276,6 @@ class CautiousPlayer(Player):
 
     def draw(self, window):
         sprite = self.hk_air if self.vel < -0.1 else self.hk_run
-        pygame.draw.circle(window, (255, 50, 255), self.rect.center, 25, 2)
         window.blit(sprite, self.rect)
 
 
@@ -308,5 +302,126 @@ class AggressivePlayer(Player):
 
     def draw(self, window):
         sprite = self.hk_air if self.vel < -0.1 else self.hk_run
-        pygame.draw.circle(window, (255, 255, 50), self.rect.center, 25, 2)
+        window.blit(sprite, self.rect)
+
+
+class RandomPlayer(Player):
+    """Flaps randomly."""
+    def __init__(self):
+        super().__init__(is_human=False)
+        self.hk_run = self.hk_run.copy()
+        self.hk_run.fill((200, 200, 200), special_flags=pygame.BLEND_RGB_MULT)
+        self.hk_air = self.hk_air.copy()
+        self.hk_air.fill((200, 200, 200), special_flags=pygame.BLEND_RGB_MULT)
+
+    def think(self, generation=1):
+        if random.random() < 0.05:
+            self.bird_flap(generation)
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        window.blit(sprite, self.rect)
+
+
+class LazyPlayer(Player):
+    """Waits until the last moment to flap."""
+    def __init__(self):
+        super().__init__(is_human=False)
+        self.hk_run = self.hk_run.copy()
+        self.hk_run.fill((100, 255, 100), special_flags=pygame.BLEND_RGB_MULT)
+        self.hk_air = self.hk_air.copy()
+        self.hk_air.fill((100, 255, 100), special_flags=pygame.BLEND_RGB_MULT)
+
+    def think(self, generation=1):
+        p = self.closest_pipe()
+        if not p:
+            if self.rect.centery > config.win_height * 0.8:
+                self.bird_flap(generation)
+            return
+        
+        # Target bottom of gap but wait until we are really dropping
+        safe_y = p.bottom_rect.top - 20
+        if self.rect.centery > safe_y and self.vel >= 3:
+            self.bird_flap(generation)
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        window.blit(sprite, self.rect)
+
+
+class PanickyPlayer(Player):
+    """Overcorrects frequently."""
+    def __init__(self):
+        super().__init__(is_human=False)
+        self.hk_run = self.hk_run.copy()
+        self.hk_run.fill((255, 100, 100), special_flags=pygame.BLEND_RGB_MULT)
+        self.hk_air = self.hk_air.copy()
+        self.hk_air.fill((255, 100, 100), special_flags=pygame.BLEND_RGB_MULT)
+
+    def think(self, generation=1):
+        p = self.closest_pipe()
+        if not p:
+            if self.rect.centery > config.win_height * 0.5:
+                self.bird_flap(generation)
+            return
+        
+        safe_y = p.top_rect.bottom + 60
+        if self.rect.centery > safe_y and random.random() < 0.6:
+            self.bird_flap(generation)
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        window.blit(sprite, self.rect)
+
+
+class CenterPlayer(Player):
+    """Maintains center of screen until pipe is close."""
+    def __init__(self):
+        super().__init__(is_human=False)
+        self.hk_run = self.hk_run.copy()
+        self.hk_run.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_MULT)
+        self.hk_air = self.hk_air.copy()
+        self.hk_air.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_MULT)
+
+    def think(self, generation=1):
+        p = self.closest_pipe()
+        if p and (p.x - self.rect.centerx) < 300:
+            gap_y = (p.top_rect.bottom + p.bottom_rect.top) / 2
+            if self.rect.centery > gap_y + 10 and self.vel >= -1:
+                self.bird_flap(generation)
+        else:
+            if self.rect.centery > config.win_height * 0.5 and self.vel >= 0:
+                self.bird_flap(generation)
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
+        window.blit(sprite, self.rect)
+
+
+class HighFlyerPlayer(Player):
+    """Stays high and dives in."""
+    def __init__(self):
+        super().__init__(is_human=False)
+        self.hk_run = self.hk_run.copy()
+        self.hk_run.fill((255, 192, 203), special_flags=pygame.BLEND_RGB_MULT) # Pink
+        self.hk_air = self.hk_air.copy()
+        self.hk_air.fill((255, 192, 203), special_flags=pygame.BLEND_RGB_MULT)
+
+    def think(self, generation=1):
+        p = self.closest_pipe()
+        if not p:
+            if self.rect.centery > config.win_height * 0.2:
+                self.bird_flap(generation)
+            return
+        
+        if (p.x - self.rect.centerx) < 150:
+            safe_y = p.bottom_rect.top - 60
+            if self.rect.centery > safe_y and self.vel >= -2:
+                self.bird_flap(generation)
+        else:
+            if self.rect.centery > config.win_height * 0.2 and self.vel >= 0:
+                self.bird_flap(generation)
+
+    def draw(self, window):
+        sprite = self.hk_air if self.vel < -0.1 else self.hk_run
         window.blit(sprite, self.rect)

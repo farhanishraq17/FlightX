@@ -69,16 +69,21 @@ ALGO_COLORS = {
     'BC':         (100, 150, 255),   # blue
     'DQN':        (255, 160, 50),    # orange
     'Heuristic':  (0,   255, 255),   # cyan
-    'Cautious':   (255, 50,  255),   # magenta
-    'Aggressive': (255, 255, 50),    # yellow
+    'SVV':        (255, 50,  255),   # magenta
+    'AGX':        (255, 255, 50),    # yellow
+    'R-DOP':      (200, 200, 200),   # grey
+    'LZ-0':       (100, 255, 100),   # light green
+    'PNC-K':      (255, 100, 100),   # light red
+    'C-NTR':      (255, 255, 255),   # white
+    'H-FLY':      (255, 192, 203),   # pink
 }
 sim_clone_state = {
     'players': [],           # list of Player objects
     'algo_map': {},          # player_id -> algo_name
     'planes_per_algo': 5,    # how many of each algorithm (increased for diversity)
     'round': 0,
-    'history': {'NEAT': [], 'BC': [], 'DQN': [], 'Heuristic': [], 'Cautious': [], 'Aggressive': []},
-    'best_scores': {'NEAT': 0, 'BC': 0, 'DQN': 0, 'Heuristic': 0, 'Cautious': 0, 'Aggressive': 0},
+    'history': {'NEAT': [], 'BC': [], 'DQN': [], 'Heuristic': [], 'SVV': [], 'AGX': [], 'R-DOP': [], 'LZ-0': [], 'PNC-K': [], 'C-NTR': [], 'H-FLY': []},
+    'best_scores': {'NEAT': 0, 'BC': 0, 'DQN': 0, 'Heuristic': 0, 'SVV': 0, 'AGX': 0, 'R-DOP': 0, 'LZ-0': 0, 'PNC-K': 0, 'C-NTR': 0, 'H-FLY': 0},
     'show_info': False,      # toggle center overlay
 }
 
@@ -710,19 +715,54 @@ def _init_sim_clone_players():
         players.append(p)
         algo_map[id(p)] = 'Heuristic'
 
-    # Cautious players
+    # Cautious (SVV)
     for i in range(n):
         p = player_mod.CautiousPlayer()
-        p.color_tint = ALGO_COLORS['Cautious']
+        p.color_tint = ALGO_COLORS['SVV']
         players.append(p)
-        algo_map[id(p)] = 'Cautious'
+        algo_map[id(p)] = 'SVV'
 
-    # Aggressive players
+    # Aggressive (AGX)
     for i in range(n):
         p = player_mod.AggressivePlayer()
-        p.color_tint = ALGO_COLORS['Aggressive']
+        p.color_tint = ALGO_COLORS['AGX']
         players.append(p)
-        algo_map[id(p)] = 'Aggressive'
+        algo_map[id(p)] = 'AGX'
+
+    # Random (R-DOP)
+    for i in range(n):
+        p = player_mod.RandomPlayer()
+        p.color_tint = ALGO_COLORS['R-DOP']
+        players.append(p)
+        algo_map[id(p)] = 'R-DOP'
+
+    # Lazy (LZ-0)
+    for i in range(n):
+        p = player_mod.LazyPlayer()
+        p.color_tint = ALGO_COLORS['LZ-0']
+        players.append(p)
+        algo_map[id(p)] = 'LZ-0'
+
+    # Panicky (PNC-K)
+    for i in range(n):
+        p = player_mod.PanickyPlayer()
+        p.color_tint = ALGO_COLORS['PNC-K']
+        players.append(p)
+        algo_map[id(p)] = 'PNC-K'
+
+    # Center (C-NTR)
+    for i in range(n):
+        p = player_mod.CenterPlayer()
+        p.color_tint = ALGO_COLORS['C-NTR']
+        players.append(p)
+        algo_map[id(p)] = 'C-NTR'
+
+    # HighFlyer (H-FLY)
+    for i in range(n):
+        p = player_mod.HighFlyerPlayer()
+        p.color_tint = ALGO_COLORS['H-FLY']
+        players.append(p)
+        algo_map[id(p)] = 'H-FLY'
 
     # Add positional jitter to all players to prevent perfect visual overlap
     for p in players:
@@ -797,26 +837,25 @@ def run_simulate_clone_step():
             new_players, new_map = _init_sim_clone_players()
             sim_clone_state['players'] = new_players
             sim_clone_state['algo_map'] = new_map
+            return True # Indicates a reset occurred
+            
+        return False
 
     if not ui_state['is_paused']:
         ticks = max(1, int(round(ui_state['simulation_speed'])))
         for _ in range(ticks):
-            simulation_tick()
+            if simulation_tick():
+                all_players = sim_clone_state['players'] # Refresh in-scope active array
+                break
 
     for p in list(config.pipes):
         p.draw(config.window)
     draw_obstacles(config.window)
 
-    # Draw players with colored glow rings
+    # Draw players
     for pl in all_players:
         if pl.alive:
             pl.draw(config.window)
-            # Draw colored ring around each plane
-            algo = sim_clone_state['algo_map'].get(id(pl), 'NEAT')
-            color = ALGO_COLORS.get(algo, (255, 255, 255))
-            cx = pl.rect.centerx
-            cy = pl.rect.centery
-            pygame.draw.circle(config.window, color, (cx, cy), 14, 2)
 
     render_notification()
 
@@ -1254,7 +1293,7 @@ def draw_control_panel(state, menu_font):
     # Overlay Sim Clone Center Info if toggled
     if state == MENU_SIM_CLONE and sim_clone_state.get('show_info', False):
         overlay_w = 400
-        overlay_h = 300
+        overlay_h = 475 # Increased to fit 11 algos
         overlay_x = config.win_width // 2 - overlay_w // 2
         overlay_y = config.win_height // 2 - overlay_h // 2 - 50
         
