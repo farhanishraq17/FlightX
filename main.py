@@ -254,7 +254,7 @@ def layout_main_menu(title_font, menu_font, author_font):
     gap = max(10, int(min_side * 0.012))
 
     title_surf = title_font.render('FlightX', True, (255, 255, 255))
-    start_surf = menu_font.render('Start Simulation (NEAT)', True, (0, 0, 0))
+    start_surf = menu_font.render('RL Simulation', True, (0, 0, 0))
     pvc_surf = menu_font.render('Human vs AI', True, (0, 0, 0))
     train_clone_surf = menu_font.render('Train Clone (BC)', True, (0, 0, 0))
     play_clone_surf = menu_font.render('Simulate Clone', True, (0, 0, 0))
